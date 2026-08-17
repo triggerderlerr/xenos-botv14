@@ -4,6 +4,7 @@ const fs = require('fs');
 
 module.exports = async (client) => {
     let isBotUpdating = false;
+    const botCreatedChannels = new Set();
 
     client.on('channelUpdate', async (oldChannel, newChannel) => {
         const guildId = newChannel.guild.id;
@@ -95,28 +96,37 @@ module.exports = async (client) => {
     });
 
     client.on('channelDelete', async (channel) => {
-        const guildId = channel.guild.id;
+        const guildId = channel.guild?.id;
+        if (!guildId) return;
         if (!db.get(`channelGuard_${guildId}`)) return;
 
-        await channel.guild.channels.create({
-            name: channel.name,
-            type: channel.type,
-            topic: channel.topic,
-            nsfw: channel.nsfw,
-            parent: channel.parent,
-            permissionOverwrites: Array.from(channel.permissionOverwrites.cache.map(perm => ({
-                id: perm.id,
-                type: perm.type,
-                allow: perm.allow,
-                deny: perm.deny
-            })))
-        });
+        try {
+            const newChannel = await channel.guild.channels.create({
+                name: channel.name,
+                type: channel.type,
+                topic: channel.topic,
+                nsfw: channel.nsfw,
+                parent: channel.parent,
+                permissionOverwrites: Array.from(channel.permissionOverwrites.cache.map(perm => ({
+                    id: perm.id,
+                    type: perm.type,
+                    allow: perm.allow,
+                    deny: perm.deny
+                })))
+            });
+            botCreatedChannels.add(newChannel.id);
+            setTimeout(() => botCreatedChannels.delete(newChannel.id), 60000);
+        } catch (error) {
+            console.error(error);
+        }
     });
 
     client.on('channelCreate', async (channel) => {
-        const guildId = channel.guild.id;
+        const guildId = channel.guild?.id;
+        if (!guildId) return;
+        if (botCreatedChannels.has(channel.id)) return;
         if (!db.get(`channelGuard_${guildId}`)) return;
 
-        await channel.delete();
+        await channel.delete().catch(() => {});
     });
 };

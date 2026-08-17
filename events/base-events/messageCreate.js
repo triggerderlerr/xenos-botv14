@@ -11,15 +11,15 @@ module.exports = async (client, message) => {
   const isAdmin = message.member?.permissions?.has(PermissionsBitField.Flags.Administrator);
   const isOwner = message.guild.ownerId === message.author.id;
 
-  const logChannelAntiBadWordId = await db.get(`logchannelantibadword_${guildId}`);
-  const logChannelAntiReklamId = await db.get(`logchannelantireklam_${guildId}`);
+  const reklamlar = db.get(`reklamengel_${guildId}`);
+  const kufur = db.get(`kufurengel_${guildId}`);
+  const antispam = db.get(`antispam_${guildId}`);
 
-  const logChannelAntiBadWord = message.guild.channels.cache.get(logChannelAntiBadWordId);
-  const logChannelAntiReklam = message.guild.channels.cache.get(logChannelAntiReklamId);
+  // Üç sistem de kapalıysa hiçbir kontrol yapma
+  if (reklamlar !== 'açık' && kufur !== 'açık' && antispam !== 'açık') return;
 
   const guildIconURL = message.guild.iconURL({ dynamic: true, size: 512 }) || message.guild.bannerURL({ dynamic: true, size: 512 });
 
-  let reklamlar = await db.get(`reklamengel_${guildId}`);
   if (reklamlar === "açık") {
     const linkler = links.linkler;
     const contentLowerCase = message.content.toLowerCase();
@@ -32,28 +32,31 @@ module.exports = async (client, message) => {
         );
         setTimeout(() => sentMessage.delete(), 5000);
 
-        if (logChannelAntiReklam) {
-          const embed = new EmbedBuilder()
-            .setColor('#FF5733')
-            .setTitle("Reklam Engellendi")
-            .setDescription(`**Gönderen:** <@${message.author.id}>`)
-            .setThumbnail(guildIconURL)
-            .setFooter({ text: `Sunucu: ${message.guild.name}`, iconURL: guildIconURL })
-            .setTimestamp()
-            .setAuthor({ name: message.guild.name, iconURL: guildIconURL })
-            .addFields(
-              { name: "Mesajın İçeriği", value: `\`\`\`${message.content}\`\`\``, inline: false },
-              { name: "Kullanıcı ID'si", value: `${message.author.id}`, inline: true },
-              { name: "Mesajın Oluşturulma Zamanı", value: `<t:${Math.floor(message.createdTimestamp / 1000)}:F>`, inline: true }
-            );
+        const logChannelAntiReklamId = db.get(`logchannelantireklam_${guildId}`);
+        if (logChannelAntiReklamId) {
+          const logChannelAntiReklam = message.guild.channels.cache.get(logChannelAntiReklamId);
+          if (logChannelAntiReklam) {
+            const embed = new EmbedBuilder()
+              .setColor('#FF5733')
+              .setTitle("Reklam Engellendi")
+              .setDescription(`**Gönderen:** <@${message.author.id}>`)
+              .setThumbnail(guildIconURL)
+              .setFooter({ text: `Sunucu: ${message.guild.name}`, iconURL: guildIconURL })
+              .setTimestamp()
+              .setAuthor({ name: message.guild.name, iconURL: guildIconURL })
+              .addFields(
+                { name: "Mesajın İçeriği", value: `\`\`\`${message.content}\`\`\``, inline: false },
+                { name: "Kullanıcı ID'si", value: `${message.author.id}`, inline: true },
+                { name: "Mesajın Oluşturulma Zamanı", value: `<t:${Math.floor(message.createdTimestamp / 1000)}:F>`, inline: true }
+              );
 
-          logChannelAntiReklam.send({ embeds: [embed] });
+            logChannelAntiReklam.send({ embeds: [embed] });
+          }
         }
       }
     }
   }
 
-  let kufur = await db.get(`kufurengel_${guildId}`);
   if (kufur === "açık") {
     const kufurler = badwords.kufurler;
 
@@ -65,33 +68,36 @@ module.exports = async (client, message) => {
         );
         setTimeout(() => sentMessage.delete(), 5000);
 
-        if (logChannelAntiBadWord) {
-          const embed = new EmbedBuilder()
-            .setColor('#FF5733')
-            .setTitle("Küfür Engellendi")
-            .setDescription(`**Gönderen:** <@${message.author.id}>`)
-            .setThumbnail(guildIconURL)
-            .setFooter({ text: `Sunucu: ${message.guild.name}`, iconURL: guildIconURL })
-            .setTimestamp()
-            .setAuthor({ name: message.guild.name, iconURL: guildIconURL })
-            .addFields(
-              { name: "Mesajın İçeriği", value: `\`\`\`${message.content}\`\`\``, inline: false },
-              { name: "Kullanıcı ID'si", value: `${message.author.id}`, inline: true },
-              { name: "Mesajın Oluşturulma Zamanı", value: `<t:${Math.floor(message.createdTimestamp / 1000)}:F>`, inline: true }
-            );
+        const logChannelAntiBadWordId = db.get(`logchannelantibadword_${guildId}`);
+        if (logChannelAntiBadWordId) {
+          const logChannelAntiBadWord = message.guild.channels.cache.get(logChannelAntiBadWordId);
+          if (logChannelAntiBadWord) {
+            const embed = new EmbedBuilder()
+              .setColor('#FF5733')
+              .setTitle("Küfür Engellendi")
+              .setDescription(`**Gönderen:** <@${message.author.id}>`)
+              .setThumbnail(guildIconURL)
+              .setFooter({ text: `Sunucu: ${message.guild.name}`, iconURL: guildIconURL })
+              .setTimestamp()
+              .setAuthor({ name: message.guild.name, iconURL: guildIconURL })
+              .addFields(
+                { name: "Mesajın İçeriği", value: `\`\`\`${message.content}\`\`\``, inline: false },
+                { name: "Kullanıcı ID'si", value: `${message.author.id}`, inline: true },
+                { name: "Mesajın Oluşturulma Zamanı", value: `<t:${Math.floor(message.createdTimestamp / 1000)}:F>`, inline: true }
+              );
 
-          logChannelAntiBadWord.send({ embeds: [embed] });
+            logChannelAntiBadWord.send({ embeds: [embed] });
+          }
         }
       }
     }
   }
 
   // Anti-spam kontrolü
-  let antispam = await db.get(`antispam_${guildId}`);
   if (antispam === "açık") {
     const spamCooldown = 3000;
-    let userMessages = await db.get(`userMessages_${guildId}_${message.author.id}`) || [];
-    
+    let userMessages = db.get(`userMessages_${guildId}_${message.author.id}`) || [];
+
     userMessages = userMessages.filter(msg => Date.now() - msg < spamCooldown);
 
     if (userMessages.length >= 5 && !isAdmin && !isOwner) {
@@ -102,7 +108,7 @@ module.exports = async (client, message) => {
       setTimeout(() => sentMessage.delete(), 5000);
     } else {
       userMessages.push(Date.now());
-      await db.set(`userMessages_${guildId}_${message.author.id}`, userMessages);
+      db.set(`userMessages_${guildId}_${message.author.id}`, userMessages);
     }
   }
 };

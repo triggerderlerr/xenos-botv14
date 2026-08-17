@@ -68,15 +68,15 @@ module.exports = {
         let setName = getName[0].toUpperCase() + getName.slice(1);
 
         setTimeout(() => {
-            getUser.setNickname(setName);
+            getUser.setNickname(setName).catch(() => {});
         }, 500);
         
         setTimeout(() => {
-            interaction.guild.members.cache.get(getUser.id).roles.add([rol, whitelist]);
+            interaction.guild.members.cache.get(getUser.id)?.roles.add([rol, whitelist]).catch(() => {});
         }, 1500);
         
         setTimeout(() => {
-            interaction.guild.members.cache.get(getUser.id).roles.remove(kayıtsız);
+            interaction.guild.members.cache.get(getUser.id)?.roles.remove(kayıtsız).catch(() => {});
         }, 2500);
 
         const sonsuz = client.emojis.cache.find(emoji => emoji.name === config.infinity);
@@ -93,8 +93,8 @@ module.exports = {
    • Kayıt işleminde **verilen rol**: <@&${rol}> **-** <@&${whitelist}>\n
    • Kayıt işleminde **alınan rol**: <@&${kayıtsız}>
    `)
-            .setFooter({ text: `Komutu kullanan yetkili : ${interaction.user.tag}`, iconURL: `${interaction.user.displayAvatarURL({ dynamic: true })}` })
-            .setImage(`${kayıtgif}`);
+            .setFooter({ text: `Komutu kullanan yetkili : ${interaction.user.tag}`, iconURL: `${interaction.user.displayAvatarURL({ dynamic: true })}` });
+        if (kayıtgif) embed.setImage(`${kayıtgif}`);
 
         interaction.reply({ embeds: [embed] });
     }

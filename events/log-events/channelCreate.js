@@ -4,13 +4,13 @@ const messages = require('../../utils/constants/messages');
 
 module.exports = async (client, channel) => {
 	try {
+		// Log durumu kapalıysa hiçbir kontrol yapma
+		if (db.get(`logdurum_${channel.guild.id}`) !== 'açık') return;
+
 		const logChannelId = db.get(`logchannels_${channel.guild.id}`);
 		const logChannel = channel.guild.channels.cache.get(logChannelId);
 		
 		if (!logChannel) return;
-		
-		const logStatus = db.get(`logdurum_${channel.guild.id}`);
-		if (logStatus !== 'açık') return;
 
 		const embed = new EmbedBuilder()
 			.setColor('#00ff00')

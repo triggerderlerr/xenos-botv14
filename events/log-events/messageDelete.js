@@ -13,18 +13,17 @@ module.exports = async (client, message) => {
   // Guild kontrolü yap
   if (!message.guild) return;
 
+  // Log durumu kapalıysa hiçbir kontrol yapma
+  const logdurum = db.get(`logdurum_${message.guild.id}`);
+  if (logdurum !== "açık") return;
+
   const logchannel = db.get(`logchannels_${message.guild.id}`);
   const kanal = message.guild.channels.cache.get(logchannel);
 
   // Log kanalı yoksa çık
   if (!kanal) return;
 
-  const logdurum = db.get(`logdurum_${message.guild.id}`);
-
-  // Log durumu açıksa mesajı gönder
-  if (logdurum === "açık") {
-    await kanal.send({
-      embeds: [embedBuilder.messageD(client, message)],
-    });
-  }
+  await kanal.send({
+    embeds: [embedBuilder.messageD(client, message)],
+  });
 };

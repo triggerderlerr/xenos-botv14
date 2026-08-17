@@ -4,16 +4,15 @@ const messages = require('../../utils/constants/messages');
 const embedBuilder = require("../../utils/helpers/embeds");
 
 module.exports = async (client, oldChannel, newChannel) => {
+	if (db.get(`logdurum_${oldChannel.guild.id}`) !== 'açık') return;
+
 	const logchannel = db.get(`logchannels_${oldChannel.guild.id}`)
 	const kanal = oldChannel.guild.channels.cache.get(logchannel)
 	if (!kanal) return;
   
-	const logdurum = db.get(`logdurum_${oldChannel.guild.id}`)
+	let changes = [];
 	
-	if (logdurum === 'açık') {
-		let changes = [];
-		
-		if (oldChannel.name !== newChannel.name) {
+	if (oldChannel.name !== newChannel.name) {
 			changes.push({type: 'name', embed: embedBuilder.channelUN(client, newChannel, oldChannel)});
 		}
 
@@ -37,6 +36,5 @@ module.exports = async (client, oldChannel, newChannel) => {
 			const embeds = changes.map(change => change.embed);
 			await kanal.send({ embeds });
 		}
-	}
 };
  

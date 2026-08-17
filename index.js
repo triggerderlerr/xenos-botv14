@@ -135,6 +135,9 @@ function checkRateLimit(guildId) {
 
 // Üye Ayrılma Olayı
 client.on("guildMemberRemove", async member => {
+  // Stats sistemi kapalıysa hiçbir kontrol/istek yapma
+  if (db.get(`statsdurum_${member.guild.id}`) !== 'açık') return;
+
   const toplam = db.get(`statkanal1_${member.guild.id}`) || "";
   const uye = db.get(`statkanal2_${member.guild.id}`) || "";
   const bot = db.get(`statkanal3_${member.guild.id}`) || "";
@@ -846,17 +849,18 @@ client.on("interactionCreate", async (interaction) => {
 
 // Sunucuya katılan birine otomatik rol verme kodu
 client.on('guildMemberAdd', async (member) => {
-  const rolID = db.fetch(`otorol_${member.guild.id}`);
-  if (rolID) {
-    const rol = member.guild.roles.cache.get(rolID);
-    if (rol) {
-      try {
-        await member.roles.add(rol);
-        console.log(`${member.user.tag} kullanıcısına ${rol.name} rolü verildi.`);
-      } catch (error) {
-        console.error(`${member.user.tag} kullanıcısına rol verilirken hata:`, error);
-      }
-    }
+  if (member.user?.bot) return;
+
+  const rolID = db.get(`otorol_${member.guild.id}`);
+  if (!rolID) return;
+  if (member.roles.cache.has(rolID)) return;
+
+  try {
+    // ID ile doğrudan rol ekle (cache'te olmasa da çalışır)
+    await member.roles.add(rolID);
+    console.log(`${member.user.tag} kullanıcısına otomatik rol verildi.`);
+  } catch (error) {
+    console.error(`${member.user.tag} kullanıcısına rol verilirken hata: ${error.message} (Rol: ${rolID} - Bot rolü rolün altında veya Rolleri Yönet yetkisi yok olabilir.)`);
   }
 });
 

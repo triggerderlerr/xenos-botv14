@@ -4,6 +4,11 @@ const messages = require('../../utils/constants/messages');
 const embedBuilder = require("../../utils/helpers/embeds");
 
 module.exports = async (client, oldMessage, newMessage) => {
+  if (!oldMessage.guild) return;
+
+  // Log durumu kapalıysa hiçbir kontrol yapma
+  if (db.get(`logdurum_${oldMessage.guild.id}`) !== "açık") return;
+
   const logchannel = db.get(`logchannels_${oldMessage.guild.id}`);
   const kanal = oldMessage.guild.channels.cache.get(logchannel);
   if (!kanal) return;
@@ -11,13 +16,11 @@ module.exports = async (client, oldMessage, newMessage) => {
   if (newMessage.guild.id !== oldMessage.guild.id) return;
   if (newMessage.author.bot) return;
   if (!oldMessage.author) return;
-  const logdurum = db.get(`logdurum_${oldMessage.guild.id}`);
-  if (logdurum === "açık") {
-    await kanal.send({
-      embeds: [
-        embedBuilder.messageU(client, oldMessage, newMessage),
-        embedBuilder.messageUN(client, oldMessage, newMessage),
-      ],
-    });
-  }
+
+  await kanal.send({
+    embeds: [
+      embedBuilder.messageU(client, oldMessage, newMessage),
+      embedBuilder.messageUN(client, oldMessage, newMessage),
+    ],
+  });
 };
