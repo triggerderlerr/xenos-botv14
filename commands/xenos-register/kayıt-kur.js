@@ -43,9 +43,17 @@ async function setup(interaction) {
   const createdChannels = [];
   const restricted = [];
 
-  const getRole = async (name, color) => {
+  const resolveRole = async (dbKey, name, color) => {
+    // 1) Veritabanında ayarlı rol varsa onu kullan
+    const configuredId = db.get(dbKey);
+    if (configuredId) {
+      const configured = guild.roles.cache.get(configuredId);
+      if (configured) return configured;
+    }
+    // 2) Aynı isimde rol varsa onu kullan
     const existing = guild.roles.cache.find(r => r.name === name && !r.managed);
     if (existing) return existing;
+    // 3) Yoksa oluştur
     const role = await guild.roles.create({
       name,
       color,
@@ -57,13 +65,24 @@ async function setup(interaction) {
   };
 
   try {
-    const erkekRol = await getRole("Erkek", "#3498DB");
-    const kadınRol = await getRole("Kadın", "#E91E63");
-    const kayıtsızRol = await getRole("Kayıtsız", "#95A5A6");
-    const yetkiliRol = await getRole("Kayıt Yetkilisi", "#2ECC71");
+    const erkekRol = await resolveRole(`erkek_${guildId}`, "Erkek", "#3498DB");
+    const kadınRol = await resolveRole(`kadın_${guildId}`, "Kadın", "#E91E63");
+    const kayıtsızRol = await resolveRole(`otorol_${guildId}`, "Kayıtsız", "#95A5A6");
+    const yetkiliRol = await resolveRole(`kayityetkili_${guildId}`, "Kayıt Yetkilisi", "#2ECC71");
 
-    // Kategori
-    let category = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === KAYIT_CATEGORY);
+    // Kayıt kanalı: db'de ayarlıysa onu kullan, yoksa isimden bul, o da yoksa oluştur
+    let kayıtKanal = null;
+    const configuredChannelId = db.get(`kayitkanal_${guildId}`);
+    if (configuredChannelId) {
+      const ch = guild.channels.cache.get(configuredChannelId);
+      if (ch && ch.isTextBased()) kayıtKanal = ch;
+    }
+    if (!kayıtKanal) {
+      kayıtKanal = guild.channels.cache.find(c => c.name === "kayıt-sohbet" && c.isTextBased());
+    }
+
+    // Kategori: kayıt kanalının kategorisi, yoksa KAYIT adında kategori, o da yoksa oluştur
+    let category = kayıtKanal?.parent || guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === KAYIT_CATEGORY);
     if (!category) {
       category = await guild.channels.create({
         name: KAYIT_CATEGORY,
@@ -85,10 +104,14 @@ async function setup(interaction) {
         reason: "Kayıt sistemi kurulumu"
       });
       createdChannels.push(category.id);
+    } else {
+      // Mevcut kategori kullanılıyorsa kayıtsız rolünün görünürlüğünü garantiye al
+      try {
+        await category.permissionOverwrites.edit(kayıtsızRol.id, { ViewChannel: true, Connect: true });
+      } catch {}
     }
 
-    // Kayıt kanalı
-    let kayıtKanal = guild.channels.cache.find(c => c.name === "kayıt-sohbet" && c.parentId === category.id);
+    // Kayıt kanalı yoksa kategori altında oluştur
     if (!kayıtKanal) {
       kayıtKanal = await guild.channels.create({
         name: "kayıt-sohbet",
@@ -113,12 +136,17 @@ async function setup(interaction) {
         reason: "Kayıt sistemi kurulumu"
       });
       createdChannels.push(kayıtKanal.id);
+    } else if (kayıtKanal.parentId !== category.id) {
+      // Ayarlı kanal başka yerdeyse kayıt kategorisine taşı
+      try {
+        await kayıtKanal.setParent(category.id);
+      } catch {}
     }
 
-    // Teyit odaları
+    // Teyit odaları (kayıt kategorisi altında bul veya oluştur)
     const voiceChannels = [];
     for (const name of ["Teyit 1", "Teyit 2"]) {
-      let vc = guild.channels.cache.find(c => c.name === name && c.parentId === category.id);
+      let vc = guild.channels.cache.find(c => c.name === name && c.isVoiceBased() && c.parentId === category.id);
       if (!vc) {
         vc = await guild.channels.create({
           name,

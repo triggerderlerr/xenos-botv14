@@ -1,9 +1,9 @@
-const { PermissionsBitField, EmbedBuilder } = require("discord.js");
+const { PermissionsBitField } = require("discord.js");
 const db = require("croxydb");
 
 module.exports = {
   name: "kayıt-ayar",
-  description: "Kayıt sisteminin tek bir ayarını değiştirir.",
+  description: "Kayıt sisteminin tek bir ayarını sunucudaki rol/kanaldan seçerek değiştirir.",
   type: 1,
   options: [
     {
@@ -23,10 +23,23 @@ module.exports = {
       ]
     },
     {
-      name: "değer",
-      description: "Yeni rol/kanal etiketi (veya gif için link)",
+      name: "rol",
+      description: "Yeni rol (erkek/kadın/kayıtsız/yetkili alanlarında seçilir)",
+      type: 8,
+      required: false
+    },
+    {
+      name: "kanal",
+      description: "Yeni metin kanalı (kayıt kanalı alanında seçilir)",
+      type: 7,
+      required: false,
+      channel_types: [0]
+    },
+    {
+      name: "gif",
+      description: "Gif linki (kayıt gif alanında girilir)",
       type: 3,
-      required: true
+      required: false
     }
   ],
   run: async (client, interaction) => {
@@ -36,7 +49,6 @@ module.exports = {
 
     const guild = interaction.guild;
     const field = interaction.options.getString("alan");
-    const value = interaction.options.getString("değer");
 
     const keyMap = {
       "erkek": "erkek",
@@ -61,37 +73,36 @@ module.exports = {
     };
     const fieldLabel = fieldLabels[field];
 
-    // Gif ayarı: URL olarak doğrudan kaydedilir
-    if (field === "gif") {
-      if (!/^https?:/i.test(value)) {
-        return interaction.reply({ content: "Gif için geçerli bir link girmelisin (https ile başlayan).", ephemeral: true });
+    const roleFields = ["erkek", "erkek2", "kadın", "kadın2", "kayitsiz-rol", "yetkili-rol"];
+
+    // Rol alanları
+    if (roleFields.includes(field)) {
+      const role = interaction.options.getRole("rol");
+      if (!role) {
+        return interaction.reply({ content: "Bu alan için sunucudan bir **rol** seçmelisin.", ephemeral: true });
       }
-      db.set(`kayıtgif_${guild.id}`, value);
-      return interaction.reply({ content: `✅ **${fieldLabel}** ayarlandı → [Link](${value})`, ephemeral: true });
+      db.set(`${keyMap[field]}_${guild.id}`, role.id);
+      return interaction.reply({ content: `✅ **${fieldLabel}** ayarlandı → <@&${role.id}>`, ephemeral: true });
     }
 
-    // Rol / kanal ayarları: etiket veya ID çözümlenir
-    const idMatch = value.match(/\d{17,20}/);
-    if (!idMatch) {
-      return interaction.reply({ content: "Geçerli bir rol veya kanal etiketi/ID'si girmelisin.", ephemeral: true });
-    }
-    const targetId = idMatch[0];
-
+    // Kanal alanı
     if (field === "kayitkanal") {
-      const channel = guild.channels.cache.get(targetId);
+      const channel = interaction.options.getChannel("kanal");
       if (!channel?.isTextBased()) {
-        return interaction.reply({ content: "Bu ID'ye ait geçerli bir metin kanalı bulamadım.", ephemeral: true });
+        return interaction.reply({ content: "Bu alan için sunucudan bir **metin kanalı** seçmelisin.", ephemeral: true });
       }
       db.set(`kayitkanal_${guild.id}`, channel.id);
       return interaction.reply({ content: `✅ **${fieldLabel}** ayarlandı → <#${channel.id}>`, ephemeral: true });
     }
 
-    const role = guild.roles.cache.get(targetId);
-    if (!role) {
-      return interaction.reply({ content: "Bu ID'ye ait bir rol bulamadım.", ephemeral: true });
+    // Gif alanı
+    if (field === "gif") {
+      const url = interaction.options.getString("gif");
+      if (!url || !/^https?:/i.test(url)) {
+        return interaction.reply({ content: "Bu alan için geçerli bir **link** girmelisin (https ile başlayan).", ephemeral: true });
+      }
+      db.set(`kayıtgif_${guild.id}`, url);
+      return interaction.reply({ content: `✅ **${fieldLabel}** ayarlandı → [Link](${url})`, ephemeral: true });
     }
-
-    db.set(`${keyMap[field]}_${guild.id}`, role.id);
-    return interaction.reply({ content: `✅ **${fieldLabel}** ayarlandı → <@&${role.id}>`, ephemeral: true });
   }
 };
