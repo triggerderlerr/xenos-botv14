@@ -56,8 +56,11 @@ module.exports = {
         kayıtsız = db.fetch(`otorol_${interaction.guild.id}`);
         kayıtkanal = db.get(`kayitkanal_${interaction.guild.id}`);
         kayıtgif = db.get(`kayıtgif_${interaction.guild.id}`);
-        
-        if (!rol) return interaction.reply(`${cinsiyet === "kadın" ? "Kadın" : cinsiyet === "üye" ? "Üye" : "Erkek"} rolü ayarlanmamış!`);
+
+        const types = register.getTypes(interaction.guild.id);
+        if (types[cinsiyet] === false) return interaction.reply("Bu kayıt türü şu an kapalı!");
+        if (cinsiyet === "üye" && !rol) rol = null;
+        if (cinsiyet !== "üye" && !rol) return interaction.reply(`${cinsiyet === "kadın" ? "Kadın" : "Erkek"} rolü ayarlanmamış!`);
         if (!kayıtsız) return interaction.reply("Kayıtsız rolü ayarlanmamış!");
         if (!kayıtkanal) return interaction.reply("Kayıt kanalı ayarlanmamış!");
 
@@ -72,7 +75,7 @@ module.exports = {
         }, 500);
         
         setTimeout(() => {
-            interaction.guild.members.cache.get(getUser.id)?.roles.add(rol).catch(() => {});
+            if (rol) interaction.guild.members.cache.get(getUser.id)?.roles.add(rol).catch(() => {});
         }, 1500);
         
         setTimeout(() => {
@@ -92,8 +95,7 @@ module.exports = {
    
    • Kayıt edilen **kullanıcı**: <@${getUser.id}>\n     
    • Kayıt işleminde **verilen isim**: ${setName}\n
-   • Kayıt işleminde **verilen rol**: <@&${rol}>\n
-   • Kayıt işleminde **alınan rol**: <@&${kayıtsız}>
+   • Kayıt işleminde **alınan rol**: <@&${kayıtsız}>${rol ? `\n   • Kayıt işleminde **verilen rol**: <@&${rol}>` : ""}
    `)
             .setFooter({ text: `Komutu kullanan yetkili : ${interaction.user.tag}`, iconURL: `${interaction.user.displayAvatarURL({ dynamic: true })}` });
         if (kayıtgif) embed.setImage(`${kayıtgif}`);

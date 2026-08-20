@@ -147,7 +147,7 @@ const guildDetail = (guild) => {
     })),
     roles: guild.roles.cache
       .filter(r => r.id !== guild.id)
-      .sort((a, b) => b.position - a.position)
+      .sort((a, b) => a.position - b.position)
       .map(r => ({ id: r.id, name: r.name, color: `#${r.color.toString(16).padStart(6, "0")}` })),
     textChannels: guild.channels.cache
       .filter(c => c.type === 0)
@@ -166,6 +166,9 @@ const guildDetail = (guild) => {
       .sort((a, b) => a.user.username.localeCompare(b.user.username))
       .map(m => ({ id: m.user.id, tag: m.user.username })),
     karsilama: db.get(`karsilama_${gid}`) || {},
+    types: register.getTypes(gid),
+    nickAktif: db.get(`nickAktif_${gid}`) !== false,
+    nickSablon: db.get(`nickSablon_${gid}`) || "Isim | Yaş",
     kayitkanalTopic: kayitKanal?.topic || "",
     record: db.get(register.RECORD_KEY(gid)) || null,
     stats: db.get(`kayitstat_${gid}`) || null
@@ -207,6 +210,19 @@ const ops = {
     const next = register.setNames(guild.id, body);
     return { message: "Oluşturulacak kanal adları kaydedildi.", names: next };
   },
+  nick: async (guild, body) => {
+    if (body.aktif !== undefined) db.set(`nickAktif_${guild.id}`, !!body.aktif);
+    if (body.sablon !== undefined) db.set(`nickSablon_${guild.id}`, String(body.sablon).slice(0, 32) || "Isim | Yaş");
+    return {
+      message: "Nick ayarları kaydedildi.",
+      nickAktif: db.get(`nickAktif_${guild.id}`) !== false,
+      nickSablon: db.get(`nickSablon_${guild.id}`) || "Isim | Yaş"
+    };
+  },
+  types: async (guild, body) => {
+    const next = register.setTypes(guild.id, body);
+    return { message: "Kayıt tipleri kaydedildi.", types: next };
+  },
   kayit: async (guild, body) => {
     const cinsiyet = ["kadın", "erkek", "üye"].includes(body.cinsiyet) ? body.cinsiyet : "erkek";
     const isim = String(body.isim || "").trim();
@@ -220,13 +236,15 @@ const ops = {
     const kanal = db.get(`kayitkanal_${guild.id}`);
     const gif = db.get(`kayıtgif_${guild.id}`);
 
-    if (!rol) throw new Error(cinsiyet === "kadın" ? "Kadın rolü ayarlanmamış!" : cinsiyet === "erkek" ? "Erkek rolü ayarlanmamış!" : "Üye rolü ayarlanmamış!");
+    const types = register.getTypes(guild.id);
+    if (types[cinsiyet] === false) throw new Error("Bu kayıt türü şu an kapalı!");
+    if (cinsiyet !== "üye" && !rol) throw new Error(cinsiyet === "kadın" ? "Kadın rolü ayarlanmamış!" : "Erkek rolü ayarlanmamış!");
     if (!kayıtsız) throw new Error("Kayıtsız rolü ayarlanmamış!");
 
     const setName = isim[0].toUpperCase() + isim.slice(1);
 
     await member.setNickname(setName).catch(() => {});
-    await member.roles.add(rol).catch(() => {});
+    if (cinsiyet !== "üye" && rol) await member.roles.add(rol).catch(() => {});
     if (kayıtsız) await member.roles.remove(kayıtsız).catch(() => {});
 
     const stat = db.get(`kayitstat_${guild.id}`) || { erkek: 0, kadın: 0, üye: 0, toplam: 0 };
@@ -250,8 +268,8 @@ const ops = {
         `${sonsuz} ‍ **${guild.name}** ‍ ${sonsuz}\n\n` +
         `• Kayıt edilen **kullanıcı**: <@${member.user.id}>\n` +
         `• Kayıt işleminde **verilen isim**: ${setName}\n` +
-        `• Kayıt işleminde **verilen rol**: <@&${rol}>\n` +
-        `• Kayıt işleminde **alınan rol**: <@&${kayıtsız}>`
+        `• Kayıt işleminde **alınan rol**: <@&${kayıtsız}>` +
+        (cinsiyet !== "üye" && rol ? `\n• Kayıt işleminde **verilen rol**: <@&${rol}>` : "")
       )
       .setFooter({ text: `Komutu kullanan yetkili : ${member.user.username}` })
       .setTimestamp();
@@ -271,14 +289,24 @@ const ops = {
     if (!register.isInstalled(guild.id)) throw new Error("Kurulu bir sistem yok.");
     const res = await register.runTeardown(guild);
     await register.refreshPanel(guild).catch(() => {});
-    return { rol: res.rol, kanal: res.kanal, kısıt: res.kısıt };
+    return { rol: res.rol, kanal: res.kanal, kısıt: res.kısıt, errors: res.errors || [] };
   },
-  reset: (guild) => {
+  reset: async (guild) => {
+    // Kurulu sistem varsa önce kanalları/rolleri/izinleri kaldır, sonra ayarları temizle
+    let res = null;
+    if (register.isInstalled(guild.id)) {
+      res = await register.runTeardown(guild).catch(() => null);
+    }
     for (const key of register.REGISTER_KEYS(guild.id)) db.delete(key);
     db.delete(register.RECORD_KEY(guild.id));
     db.delete(`kayitstat_${guild.id}`);
+    db.delete(`nickAktif_${guild.id}`);
+    db.delete(`nickSablon_${guild.id}`);
     register.refreshPanel(guild).catch(() => {});
-    return { message: "Kayıt ayarları sıfırlandı." };
+    return {
+      message: "Kayıt sistemi tamamen sıfırlandı" + (res && res.errors && res.errors.length ? (" (bazı öğeler silinemedi: " + res.errors.length + ")") : "") + ".",
+      errors: (res && res.errors) || []
+    };
   }
 };
 
@@ -428,6 +456,8 @@ const server = http.createServer(async (req, res) => {
           if (action === "welcome") return json(res, 200, await ops.welcome(guild, body));
           if (action === "topic") return json(res, 200, await ops.topic(guild, body));
           if (action === "kanalad") return json(res, 200, await ops.kanalad(guild, body));
+          if (action === "nick") return json(res, 200, await ops.nick(guild, body));
+          if (action === "types") return json(res, 200, await ops.types(guild, body));
           if (action === "kayit") return json(res, 200, await ops.kayit(guild, body));
           if (action === "setup") return json(res, 200, await ops.setup(guild));
           if (action === "teardown") return json(res, 200, await ops.teardown(guild));

@@ -133,7 +133,7 @@ function banner(d) {
   if (!d) return;
   if (!d.installed) {
     b.style.display = "flex";
-    b.innerHTML = "⚠️ <b>Kayıt sistemi kurulu değil.</b> " + esc(d.name) + " sunucusunda çalıştırmak için <b>Kurulum</b> sekmesinden <b>Kur</b> butonuna bas.";
+    b.innerHTML = "⚠️ <b>Kayıt sistemi kurulu değil.</b> " + esc(d.name) + " sunucusunda çalıştırmak için <b>Kayıt Sistemi</b> sekmesinden <b>Kur</b> butonuna bas.";
     return;
   }
   let warned = [];
@@ -149,29 +149,7 @@ function banner(d) {
   }
 }
 
-function renderAll() { if (!D) return; renderGenel(); renderRoller(); renderKanallar(); renderKarsilama(); renderKayit(); renderKurulum(); }
-
-function renderGenel() {
-  const icon = D.icon ? '<img src="' + esc(D.icon) + '" width="56" height="56" style="border-radius:12px;float:left;margin-right:14px">' : "";
-  document.getElementById("genelInfo").innerHTML =
-    '<div style="overflow:hidden">' + icon +
-    '<div><b style="font-size:17px">' + esc(D.name) + '</b><br><span class="muted" style="font-size:13px">' +
-    '<span class="badge ' + (D.installed ? "on" : "off") + '">' + (D.installed ? "SİSTEM KURULU" : "KURULU DEĞİL") + '</span></span></div></div><br>' +
-    '<div class="kv"><span>Üye sayısı</span><b>' + (D.memberCount || 0) + '</b></div>' +
-    '<div class="kv"><span>Rol sayısı</span><b>' + D.roles.length + '</b></div>' +
-    '<div class="kv"><span>Metin kanalı</span><b>' + D.textChannels.length + '</b></div>' +
-    '<div class="kv"><span>Kategori</span><b>' + D.categories.length + '</b></div>';
-
-  const s = D.stats;
-  document.getElementById("genelStats").innerHTML =
-    (D.installed
-      ? '<div class="kv"><span>Kayıtsız rolü</span><b>' + esc(roleName(D.record && D.record.kayitsizRoleId)) + '</b></div>'
-      : '<div class="kv"><span>Durum</span><b class="no">Kurulmamış</b></div>') +
-    '<div class="kv"><span>Toplam kayıt</span><b>' + (s ? s.toplam : 0) + '</b></div>' +
-    '<div class="kv"><span>Erkek kayıt</span><b>' + (s ? s.erkek || 0 : 0) + '</b></div>' +
-    '<div class="kv"><span>Kadın kayıt</span><b>' + (s ? s.kadın || 0 : 0) + '</b></div>' +
-    '<div class="kv"><span>Üye kayıt</span><b>' + (s ? s.üye || 0 : 0) + '</b></div>';
-}
+function renderAll() { if (!D) return; renderRoller(); renderKanallar(); renderKarsilama(); renderKurulum(); }
 
 function fieldOpts(key) {
   let opts = '<option value="">— Ayarlanmadı —</option>';
@@ -199,13 +177,17 @@ function renderKanallar() {
   document.getElementById("fld_kayitkanal").innerHTML = fieldOpts("kayitkanal");
   document.getElementById("fld_topic").value = D.kayitkanalTopic || "";
   const rec = D.record;
-  document.getElementById("kanalYapi").textContent = rec
-    ? "Kategori: " + chanName(D.categories.find(c => rec.createdChannels.includes(c.id))?.id) + "\n" +
-      "Kayıt kanalı: " + chanName(D.settings.find(x => x.key === "kayitkanal").value) + "\n" +
-      "Oluşturulan roller: " + (rec.createdRoles || []).map(id => roleName(id)).join(", ") + "\n" +
-      "Oluşturulan kanallar: " + (rec.createdChannels || []).map(id => chanName(id)).join(", ") + "\n" +
-      "Gizlenen kanal: " + (rec.restricted || []).length + " adet"
-    : "Kurulmamış. Kurulum sekmesinden sistemi kur.";
+  const box = document.getElementById("statusBox");
+  if (!rec) {
+    box.innerHTML = '<div class="muted">Sistem kurulu değil.</div>';
+    return;
+  }
+  const kayitKanal = D.settings.find(x => x.key === "kayitkanal")?.value;
+  box.innerHTML =
+    '<div class="kv"><span>Durum</span><span class="badge on">KURULU</span></div>' +
+    '<div class="kv"><span>Roller</span><b>' + ((rec.createdRoles || []).map(id => roleName(id)).join(", ") || "—") + '</b></div>' +
+    '<div class="kv"><span>Kanallar</span><b>' + ((rec.createdChannels || []).map(id => chanName(id)).join(", ") || "—") + '</b></div>' +
+    (kayitKanal ? '<div class="kv"><span>Kayıt kanalı</span><b>' + esc(chanName(kayitKanal)) + '</b></div>' : "");
 }
 
 function renderKarsilama() {
@@ -230,24 +212,50 @@ document.querySelectorAll("#sec-ayarlar .chip").forEach(chip => {
   });
 });
 
-function renderKayit() {
-  document.getElementById("memberlist").innerHTML =
-    D.members.map(m => '<option value="' + m.id + '">' + esc(m.tag) + '</option>').join("");
-}
-
 function renderKurulum() {
-  const rec = D.record;
-  document.getElementById("kurulumKayit").innerHTML = rec
-    ? '<div class="kv"><span>Kayıtsız rolü</span><b>' + esc(roleName(rec.kayitsizRoleId)) + '</b></div>' +
-      '<div class="kv"><span>Oluşturulan rol</span><b>' + (rec.createdRoles || []).length + '</b></div>' +
-      '<div class="kv"><span>Oluşturulan kanal</span><b>' + (rec.createdChannels || []).length + '</b></div>' +
-      '<div class="kv"><span>Gizlenen kanal</span><b>' + (rec.restricted || []).length + '</b></div>'
-    : '<div class="muted">Sistem kurulu değil.</div>';
-
   const n = D.names || {};
   document.getElementById("fld_kategoriad").value = n.kategori || "KAYIT";
   document.getElementById("fld_kayitkanalad").value = n.kayitkanal || "reg-chat";
   document.getElementById("fld_teyitad").value = n.teyit || "Ses Teyit";
+
+  document.getElementById("chk_nickAktif").checked = D.nickAktif !== false;
+  document.getElementById("fld_nickSablon").value = D.nickSablon || "Isim | Yaş";
+
+  const t = D.types || {};
+  document.getElementById("chk_erkek").checked = t.erkek !== false;
+  document.getElementById("chk_kadin").checked = t.kadın !== false;
+  document.getElementById("chk_uye").checked = t.üye !== false;
+}
+
+async function saveTypes() {
+  try {
+    const body = {
+      erkek: document.getElementById("chk_erkek").checked,
+      kadın: document.getElementById("chk_kadin").checked,
+      üye: document.getElementById("chk_uye").checked
+    };
+    const r = await api("/api/guild/" + ACTIVE + "/types", { method: "POST", body: JSON.stringify(body) });
+    D.types = r.types;
+    msgBox(r.message || "Kayıt tipleri kaydedildi.", "ok");
+  } catch (e) {
+    msgBox(errorMsg(e), "no");
+  }
+}
+
+async function saveNick() {
+  try {
+    const body = {
+      aktif: document.getElementById("chk_nickAktif").checked,
+      sablon: document.getElementById("fld_nickSablon").value.trim()
+    };
+    if (!body.sablon) return toast("Şablon boş olamaz.", true);
+    const r = await api("/api/guild/" + ACTIVE + "/nick", { method: "POST", body: JSON.stringify(body) });
+    D.nickAktif = r.nickAktif;
+    D.nickSablon = r.nickSablon;
+    msgBox(r.message || "Nick ayarları kaydedildi.", "ok");
+  } catch (e) {
+    msgBox(errorMsg(e), "no");
+  }
 }
 
 async function saveKanalAd() {
@@ -302,23 +310,23 @@ async function saveWelcome() {
   } catch (e) { toast(e.message, true); }
 }
 
-async function doKayit() {
-  const userId = document.getElementById("k_user").value.trim();
-  const cinsiyet = document.getElementById("k_cins").value;
-  const isim = document.getElementById("k_isim").value.trim();
-  if (!userId || !isim) return toast("Üye ve isim gerekli.", true);
-  try {
-    const r = await api("/api/guild/" + ACTIVE + "/kayit", { method: "POST", body: JSON.stringify({ userId, cinsiyet, isim }) });
-    toast(r.message);
-    loadGuild();
-  } catch (e) { toast(e.message, true); }
-}
-
 async function setup() {
   try {
     document.getElementById("btnSetup").disabled = true;
     const r = await api("/api/guild/" + ACTIVE + "/setup", { method: "POST" });
-    msgBox("✅ Kuruldu\nErkek: " + roleName(r.erkek) + " • Kadın: " + roleName(r.kadın) + " • Üye: " + roleName(r.üye) + "\nKayıtsız: " + roleName(r.kayitsiz) + " • Yetkili: " + roleName(r.yetkili) + "\nKategori: " + r.kategori + " • Kanal: " + chanName(r.kanal) + "\nGizlenen: " + r.restrictedCount + " kanal", "ok");
+    const roller = (D && D.types || {});
+    const satirlar = [
+      "✅ Kuruldu",
+      "Erkek: " + (roller.erkek ? roleName(r.erkek) : "—"),
+      "Kadın: " + (roller.kadın ? roleName(r.kadın) : "—"),
+      "Üye: " + (roller.üye ? roleName(r.üye) : "—"),
+      "Kayıtsız: " + roleName(r.kayitsiz),
+      "Yetkili: " + roleName(r.yetkili),
+      "Kategori: " + r.kategori,
+      "Kanal: " + chanName(r.kanal),
+      "Gizlenen: " + r.restrictedCount + " kanal"
+    ].join("\n");
+    msgBox(satirlar, "ok");
     toast("Sistem kuruldu");
     loadGuild();
   } catch (e) { msgBox(e.message, "no"); toast(e.message, true); }
@@ -328,17 +336,22 @@ async function setup() {
 async function teardown() {
   try {
     const r = await api("/api/guild/" + ACTIVE + "/teardown", { method: "POST" });
-    msgBox("❌ Kaldırıldı\nSilinen rol: " + r.rol + " • Silinen kanal: " + r.kanal + " • Açılan kanal: " + r.kısıt, "ok");
-    toast("Sistem kaldırıldı");
+    let txt = "❌ Kaldırıldı\nSilinecek rol: " + r.rol + " • Silinecek kanal: " + r.kanal + " • Açılacak kanal: " + r.kısıt;
+    if (r.errors && r.errors.length) {
+      txt += "\n⚠️ Bazı öğeler silinemedi:\n" + r.errors.map(x => "• " + x).join("\n");
+    }
+    msgBox(txt, "ok");
+    toast(r.errors && r.errors.length ? "Kaldırıldı (hata ile)" : "Sistem kaldırıldı");
     loadGuild();
   } catch (e) { msgBox(e.message, "no"); toast(e.message, true); }
 }
 
 async function resetAll() {
-  if (!confirm("Tüm kayıt ayarları silinecek. Emin misin?")) return;
+  if (!confirm("Tüm kayıt ayarları silinecek ve kurulu sistem (kanallar/roller/izinler) kaldırılacak. Emin misin?")) return;
   try {
     const r = await api("/api/guild/" + ACTIVE + "/reset", { method: "POST" });
-    toast(r.message);
+    toast(r.message || "Sıfırlandı");
+    if (r.errors && r.errors.length) toast(r.errors.length + " öğe silinemedi!", true);
     loadGuild();
   } catch (e) { toast(e.message, true); }
 }

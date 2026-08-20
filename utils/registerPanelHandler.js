@@ -15,7 +15,7 @@ const hasWelcomePerm = (interaction) =>
 const GIF_INPUT = "kayit_gif_url";
 const NAME_INPUT = "kayit_name_input";
 
-// Karşılama butonlarından gelen kayıt: tıklayan üye kendi adını yazar, rolü otomatik atanır
+// Karşılama butonlarından gelen kayıt: tıklayan yetkili ismi girer, rol otomatik atanır
 async function welcomeRegister(interaction, member, cinsiyet) {
   const guild = interaction.guild;
   const rol = db.get(`${cinsiyet}_${guild.id}`);
@@ -23,7 +23,11 @@ async function welcomeRegister(interaction, member, cinsiyet) {
   const kayıtkanal = db.get(`kayitkanal_${guild.id}`);
   const kayıtgif = db.get(`kayıtgif_${guild.id}`);
 
-  if (!rol) throw new Error(cinsiyet === "kadın" ? "Kız rolü ayarlanmamış!" : "Erkek rolü ayarlanmamış!");
+  const types = register.getTypes(guild.id);
+  if (types[cinsiyet] === false) throw new Error("Bu kayıt türü kapalı!");
+  if (!rol && cinsiyet !== "üye") {
+    throw new Error(cinsiyet === "kadın" ? "Kız rolü ayarlanmamış!" : "Erkek rolü ayarlanmamış!");
+  }
   if (!kayıtsız) throw new Error("Kayıtsız rolü ayarlanmamış!");
 
   const isim = interaction.fields.getTextInputValue(NAME_INPUT);
@@ -31,11 +35,12 @@ async function welcomeRegister(interaction, member, cinsiyet) {
   const setName = isim.trim()[0].toUpperCase() + isim.trim().slice(1).toLowerCase();
 
   await member.setNickname(setName).catch(() => {});
-  await member.roles.add(rol).catch(() => {});
+  if (cinsiyet !== "üye" && rol) await member.roles.add(rol).catch(() => {});
   await member.roles.remove(kayıtsız).catch(() => {});
 
   const stat = db.get(`kayitstat_${guild.id}`) || { erkek: 0, kadın: 0, üye: 0, toplam: 0 };
   if (cinsiyet === "kadın") stat.kadın++;
+  else if (cinsiyet === "üye") stat.üye++;
   else stat.erkek++;
   stat.toplam++;
   db.set(`kayitstat_${guild.id}`, stat);
@@ -47,14 +52,16 @@ async function welcomeRegister(interaction, member, cinsiyet) {
     .setThumbnail(
       cinsiyet === "kadın"
         ? "https://cdn.discordapp.com/attachments/1188118049887367168/1242067305362358302/Custom-Icon-Design-Flatastic-7-Female.512.png?ex=664c7cd2&is=664b2b52&hm=0bf5486b1664455a5b285ca35804458763bd0b92b89d255b19c3d39b45589114&"
-        : "https://cdn.discordapp.com/attachments/1188118049887367168/1242065418621947975/male-symbol-blue-icon.png?ex=664c7b10&is=664b2990&hm=305860cea743814cda8dd232942cece77d54d5bd4008b21fef90bce43b77a98a&"
+        : cinsiyet === "üye"
+          ? "https://cdn.discordapp.com/attachments/1188118049887367168/1251222509811007568.webp?size=96&quality=lossless"
+          : "https://cdn.discordapp.com/attachments/1188118049887367168/1242065418621947975/male-symbol-blue-icon.png?ex=664c7b10&is=664b2990&hm=305860cea743814cda8dd232942cece77d54d5bd4008b21fef90bce43b77a98a&"
     )
     .setDescription(
       `${sonsuz} ‍ **${guild.name}** ‍ ${sonsuz}\n\n` +
       `• Kayıt edilen **kullanıcı**: <@${member.user.id}>\n` +
       `• Kayıt işleminde **verilen isim**: ${setName}\n` +
-      `• Kayıt işleminde **verilen rol**: <@&${rol}>\n` +
-      `• Kayıt işleminde **alınan rol**: <@&${kayıtsız}>`
+      `• Kayıt işleminde **alınan rol**: <@&${kayıtsız}>` +
+      (cinsiyet !== "üye" && rol ? `\n• Kayıt işleminde **verilen rol**: <@&${rol}>` : "")
     )
     .setFooter({ text: `Teyit eden : ${interaction.user.tag}` })
     .setTimestamp();
@@ -71,17 +78,21 @@ module.exports = (client) => {
 
     try {
       // ---------------- Hoşgeldin kayıt butonları ----------------
-      if (interaction.isButton() && (customId.startsWith("kayit_wlc_erkek_") || customId.startsWith("kayit_wlc_kadin_"))) {
+      if (interaction.isButton() && (customId.startsWith("kayit_wlc_erkek_") || customId.startsWith("kayit_wlc_kadin_") || customId.startsWith("kayit_wlc_uye_"))) {
         if (!hasWelcomePerm(interaction)) {
           return interaction.reply({ content: "Bu işlem için yetkin yok! Sadece kayıt yetkilileri kayıt yapabilir.", ephemeral: true });
         }
-        const cinsiyet = customId.startsWith("kayit_wlc_kadin_") ? "kadın" : "erkek";
+        const cinsiyet = customId.startsWith("kayit_wlc_kadin_") ? "kadın" : customId.startsWith("kayit_wlc_uye_") ? "üye" : "erkek";
         const targetId = customId.slice(`kayit_wlc_${cinsiyet}_`.length);
         const member = await interaction.guild.members.fetch(targetId).catch(() => null);
         if (!member) return interaction.reply({ content: "Kayıt edilecek üye bulunamadı.", ephemeral: true });
 
-        const rolVar = db.get(`${cinsiyet}_${interaction.guild.id}`);
-        if (!rolVar) return interaction.reply({ content: "Bu kayıt türü henüz ayarlanmamış, yetkilileri bekleyin!", ephemeral: true });
+        const types = register.getTypes(interaction.guild.id);
+        if (types[cinsiyet] === false) return interaction.reply({ content: "Bu kayıt türü şu an kapalı!", ephemeral: true });
+        if (cinsiyet !== "üye") {
+          const rolVar = db.get(`${cinsiyet}_${interaction.guild.id}`);
+          if (!rolVar) return interaction.reply({ content: "Bu kayıt türü henüz ayarlanmamış, yetkilileri bekleyin!", ephemeral: true });
+        }
         const kayitRolleri = [db.get(`erkek_${interaction.guild.id}`), db.get(`kadın_${interaction.guild.id}`), db.get(`üye_${interaction.guild.id}`)];
         if (kayitRolleri.some((r) => r && member.roles.cache.has(r))) {
           return interaction.reply({ content: `<@${targetId}> zaten kayıtlı!`, ephemeral: true });
@@ -115,7 +126,7 @@ module.exports = (client) => {
       if (interaction.isModalSubmit() && customId.startsWith("kayit_wlc_modal_")) {
         const rest = customId.slice("kayit_wlc_modal_".length);
         const [cinsiyet, targetId] = rest.split("_");
-        if ((cinsiyet !== "erkek" && cinsiyet !== "kadın") || !targetId) return;
+        if ((cinsiyet !== "erkek" && cinsiyet !== "kadın" && cinsiyet !== "üye") || !targetId) return;
         const member = await interaction.guild.members.fetch(targetId).catch(() => null);
         if (!member) return interaction.reply({ content: "Kayıt edilecek üye bulunamadı.", ephemeral: true });
         try {
@@ -229,12 +240,18 @@ module.exports = (client) => {
         }
         try {
           const res = await register.runSetup(guild);
+          const types = register.getTypes(guild.id);
+          const rolSatir = [
+            types.erkek ? `**Erkek:** <@&${res.erkek}>` : null,
+            types.kadın ? `**Kadın:** <@&${res.kadın}>` : null,
+            types.üye ? `**Üye:** <@&${res.üye}>` : null
+          ].filter(Boolean).join(" • ");
           const embed = new EmbedBuilder()
             .setColor("#2ECC71")
             .setTitle("✅ Kayıt Sistemi Kuruldu")
             .setDescription(
               `**Kayıtsız:** <@&${res.kayitsiz}> • **Yetkili:** <@&${res.yetkili}>\n` +
-              `**Erkek:** <@&${res.erkek}> • **Kadın:** <@&${res.kadın}> • **Üye:** <@&${res.üye}>\n\n` +
+              `${rolSatir}\n\n` +
               `**Kategori:** ${res.kategori.name} • **Kayıt:** <#${res.kanal.id}> • **Teyit:** ${res.teyit.map(vc => `<#${vc.id}>`).join(" ")}\n\n` +
               `🔒 **Kayıtsız** rolü ${res.restrictedCount} kanaldan gizlendi (sadece kayıt kategorisini görebilir).`
             )
@@ -254,12 +271,14 @@ module.exports = (client) => {
         }
         try {
           const res = await register.runTeardown(guild);
+          let desc = `Sistem için kullanılan **${res.rol}** rol ve **${res.kanal}** kanal silindi, **${res.kısıt}** kanaldaki görünürlük kısıtlaması geri alındı.`;
+          if (res.errors && res.errors.length) {
+            desc += "\n\n⚠️ **Silinemeyenler:**\n" + res.errors.slice(0, 8).map(x => "• " + x).join("\n") + (res.errors.length > 8 ? `\n+${res.errors.length - 8} hata daha` : "");
+          }
           const embed = new EmbedBuilder()
             .setColor("#E74C3C")
             .setTitle("❌ Kayıt Sistemi Kaldırıldı")
-            .setDescription(
-              `Oluşturulan **${res.rol}** rol ve **${res.kanal}** kanal silindi, **${res.kısıt}** kanaldaki görünürlük kısıtlaması geri alındı.`
-            )
+            .setDescription(desc)
             .setTimestamp();
           await interaction.editReply(register.renderPage(guild));
           return interaction.followUp({ embeds: [embed], ephemeral: true });
@@ -270,11 +289,16 @@ module.exports = (client) => {
       }
 
       if (customId === BTN.sifirla) {
+        let res = null;
+        if (register.isInstalled(guild.id)) {
+          res = await register.runTeardown(guild).catch(() => null);
+        }
         for (const key of register.REGISTER_KEYS(guild.id)) db.delete(key);
         db.delete(register.RECORD_KEY(guild.id));
         db.delete(`kayitstat_${guild.id}`);
         await interaction.editReply(register.renderPage(guild));
-        return interaction.followUp({ content: "🧹 Kayıt ayarları sıfırlandı.", ephemeral: true });
+        const uyarı = res && res.errors && res.errors.length ? ` ⚠️ ${res.errors.length} öğe silinemedi.` : "";
+        return interaction.followUp({ content: `🧹 Kayıt sistemi tamamen sıfırlandı.${uyarı}`, ephemeral: true });
       }
 
       if (customId === BTN.yenile) {

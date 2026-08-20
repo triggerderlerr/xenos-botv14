@@ -11,6 +11,30 @@ const RECORD_KEY = (guildId) => `kayıtkur_${guildId}`;
 const PANEL_KEY = (guildId) => `kayitpanel_${guildId}`;
 
 const NAMES_KEY = (guildId) => `kayitadlar_${guildId}`;
+const TYPES_KEY = (guildId) => `kayitTipler_${guildId}`;
+
+// Aktif/pasif kayıt tipleri (erkek / kadın / üye) — varsayılan hepsi açık
+const DEFAULT_TYPES = { erkek: true, kadın: true, üye: true };
+
+const getTypes = (guildId) => {
+  const stored = db.get(TYPES_KEY(guildId)) || {};
+  return {
+    erkek: stored.erkek !== false,
+    kadın: stored.kadın !== false,
+    üye: stored.üye !== false
+  };
+};
+
+const setTypes = (guildId, body) => {
+  const current = getTypes(guildId);
+  const next = {
+    erkek: body.erkek !== undefined ? !!body.erkek : current.erkek,
+    kadın: body.kadın !== undefined ? !!body.kadın : current.kadın,
+    üye: body.üye !== undefined ? !!body.üye : current.üye
+  };
+  db.set(TYPES_KEY(guildId), next);
+  return next;
+};
 
 const DEFAULT_NAMES = {
   kategori: "KAYIT",
@@ -46,7 +70,8 @@ const REGISTER_KEYS = (guildId) => [
   `kayityetkili_${guildId}`,
   `kayitkanal_${guildId}`,
   `kayıtgif_${guildId}`,
-  NAMES_KEY(guildId)
+  NAMES_KEY(guildId),
+  TYPES_KEY(guildId)
 ];
 
 // Panel butonlarının customId değerleri (ASCII güvenli)
@@ -302,36 +327,55 @@ function gifModal() {
     );
 }
 
-// Hoşgeldin mesajı kayıt butonları — customId'ye mesajın sahibi olan üyenin ID'si gömülür
-function welcomeButtons(memberId) {
-  const erkek = new ButtonBuilder()
-    .setCustomId(`kayit_wlc_erkek_${memberId}`)
-    .setLabel("Erkek")
-    .setStyle(ButtonStyle.Primary)
-    .setEmoji("🧍");
-  const kadın = new ButtonBuilder()
-    .setCustomId(`kayit_wlc_kadin_${memberId}`)
-    .setLabel("Kız")
-    .setStyle(ButtonStyle.Danger)
-    .setEmoji("👩");
-  const at = new ButtonBuilder()
-    .setCustomId(`kayit_wlc_at_${memberId}`)
-    .setLabel("At")
-    .setStyle(ButtonStyle.Secondary)
-    .setEmoji("⚔️");
-  const yasakla = new ButtonBuilder()
-    .setCustomId(`kayit_wlc_yasakla_${memberId}`)
-    .setLabel("Yasakla")
-    .setStyle(ButtonStyle.Danger)
-    .setEmoji("🔨");
-  return new ActionRowBuilder().addComponents(erkek, kadın, at, yasakla);
+// Hoşgeldin mesajı kayıt butonları — customId'ye mesajın sahibi olan üyenin ID'si gömülür, sadece aktif tipler gösterilir
+function welcomeButtons(memberId, guildId) {
+  const types = getTypes(guildId);
+  const buttons = [];
+
+  if (types.erkek) {
+    buttons.push(new ButtonBuilder()
+      .setCustomId(`kayit_wlc_erkek_${memberId}`)
+      .setLabel("Erkek")
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji("🧍"));
+  }
+  if (types.kadın) {
+    buttons.push(new ButtonBuilder()
+      .setCustomId(`kayit_wlc_kadin_${memberId}`)
+      .setLabel("Kız")
+      .setStyle(ButtonStyle.Danger)
+      .setEmoji("👩"));
+  }
+  if (types.üye) {
+    buttons.push(new ButtonBuilder()
+      .setCustomId(`kayit_wlc_uye_${memberId}`)
+      .setLabel("Üye")
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji("👤"));
+  }
+
+  buttons.push(
+    new ButtonBuilder()
+      .setCustomId(`kayit_wlc_at_${memberId}`)
+      .setLabel("At")
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji("⚔️"),
+    new ButtonBuilder()
+      .setCustomId(`kayit_wlc_yasakla_${memberId}`)
+      .setLabel("Yasakla")
+      .setStyle(ButtonStyle.Danger)
+      .setEmoji("🔨")
+  );
+
+  return new ActionRowBuilder().addComponents(buttons);
 }
 
 // Cinsiyet seçilince isim girişi için modal — hedef üye ID'si de customId'de taşınır
 function welcomeNameModal(cinsiyet, memberId) {
+  const title = cinsiyet === "kadın" ? "Kız Kayıt" : cinsiyet === "üye" ? "Üye Kayıt" : "Erkek Kayıt";
   return new ModalBuilder()
     .setCustomId(`kayit_wlc_modal_${cinsiyet}_${memberId}`)
-    .setTitle(cinsiyet === "kadın" ? "Kız Kayıt" : "Erkek Kayıt")
+    .setTitle(title)
     .addComponents(
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
@@ -445,37 +489,64 @@ async function runSetup(guild) {
   const guildId = guild.id;
   const everyone = guild.roles.everyone;
   const names = getNames(guildId);
+  const types = getTypes(guildId);
 
   const createdRoles = [];
   const createdChannels = [];
   const restricted = [];
 
-  const resolveRole = async (dbKey, name, color) => {
+  // Kurulum sırasında bir rol bir kez seçilir (yakın isimli roller iki işe birden bağlanmasın)
+  const usedRoleIds = new Set();
+
+  // Rol adı normalizasyonu: küçük harf + Türkçe ASCII + sadece harf/rakam/boşluk kalır (emoji/süslemeler düşer)
+  const normRoleName = (s) => String(s || "")
+    .toLowerCase()
+    .replace(/ı/g, "i").replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ş/g, "s").replace(/ö/g, "o").replace(/ç/g, "c")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const resolveRole = async (dbKey, name, aliases, color) => {
     // 1) Veritabanında ayarlı rol varsa onu kullan
     const configuredId = db.get(dbKey);
     if (configuredId) {
       const configured = guild.roles.cache.get(configuredId);
-      if (configured) return configured;
+      if (configured) {
+        usedRoleIds.add(configured.id);
+        return configured;
+      }
     }
-    // 2) Aynı isimde rol varsa onu kullan
-    const existing = guild.roles.cache.find(r => r.name === name && !r.managed);
-    if (existing) return existing;
-    // 3) Yoksa oluştur
+    // 2) Aynı isimde rol varsa onu kullan (emoji/süslemeler göz ardı edilir, TR+EN aliaslar denenir)
+    const normalized = aliases.map(normRoleName);
+    const existing = guild.roles.cache.find(r => {
+      if (r.managed || usedRoleIds.has(r.id)) return false;
+      const parts = normRoleName(r.name).split(" ");
+      return parts.some(p => normalized.includes(p));
+    });
+    if (existing) {
+      usedRoleIds.add(existing.id);
+      return existing;
+    }
+    // 3) Yoksa oluştur (yalnızca bu tip aktifse)
     const role = await guild.roles.create({
       name,
       color,
       mentionable: true,
       reason: "Kayıt sistemi kurulumu"
     });
+    usedRoleIds.add(role.id);
     createdRoles.push(role.id);
     return role;
   };
 
-  const erkekRol = await resolveRole(`erkek_${guildId}`, "Erkek", "#3498DB");
-  const kadınRol = await resolveRole(`kadın_${guildId}`, "Kadın", "#E91E63");
-  const üyeRol = await resolveRole(`üye_${guildId}`, "Üye", "#95A5A6");
-  const kayıtsızRol = await resolveRole(`otorol_${guildId}`, "Kayıtsız", "#95A5A6");
-  const yetkiliRol = await resolveRole(`kayityetkili_${guildId}`, "Kayıt Yetkilisi", "#2ECC71");
+  // Discord her yeni rolü @everyone'un hemen üstüne ekler → İLK oluşturulan EN ÜSTTE kalır.
+  // Doğru hiyerarşi (üstten alta): Yetkili, Erkek/Kadın/Üye, Kayıtsız.
+  // Bu yüzden önce yüksek yetkili, en son kayıtsız oluşturulur.
+  const yetkiliRol = await resolveRole(`kayityetkili_${guildId}`, "Kayıt Yetkilisi", ["Kayıt Yetkilisi", "Kayit Yetkili", "Register Staff", "Kayıt Ekibi", "Kayit Ekibi", "Yetkili Register"], "#2ECC71");
+  const erkekRol = types.erkek ? await resolveRole(`erkek_${guildId}`, "Erkek", ["Erkek", "Male", "Man", "Boy", "Man Role", "Male Role"], "#3498DB") : null;
+  const kadınRol = types.kadın ? await resolveRole(`kadın_${guildId}`, "Kadın", ["Kadın", "Kiz", "Female", "Woman", "Girl", "Female Role", "Woman Role"], "#E91E63") : null;
+  const üyeRol = types.üye ? await resolveRole(`üye_${guildId}`, "Üye", ["Üye", "Üyelik", "Member", "Member Role"], "#95A5A6") : null;
+  const kayıtsızRol = await resolveRole(`otorol_${guildId}`, "Kayıtsız", ["Kayıtsız", "Kayitsiz", "Unregistered", "Unregistered Member", "Yeni Üye", "New Member", "Kayıt Bekleyen"], "#95A5A6");
 
   // Kayıt kanalı: db'de ayarlıysa onu kullan, yoksa isimden bul, o da yoksa oluştur
   let kayıtKanal = null;
@@ -587,15 +658,16 @@ async function runSetup(guild) {
   }
 
   // Veritabanı
-  db.set(`erkek_${guildId}`, erkekRol.id);
-  db.set(`kadın_${guildId}`, kadınRol.id);
-  db.set(`üye_${guildId}`, üyeRol.id);
+  if (erkekRol) db.set(`erkek_${guildId}`, erkekRol.id);
+  if (kadınRol) db.set(`kadın_${guildId}`, kadınRol.id);
+  if (üyeRol) db.set(`üye_${guildId}`, üyeRol.id);
   db.set(`otorol_${guildId}`, kayıtsızRol.id);
   db.set(`kayityetkili_${guildId}`, yetkiliRol.id);
   db.set(`kayitkanal_${guildId}`, kayıtKanal.id);
 
   db.set(RECORD_KEY(guildId), {
     kayitsizRoleId: kayıtsızRol.id,
+    yetkiliRoleId: yetkiliRol.id,
     createdRoles,
     createdChannels,
     restricted
@@ -603,10 +675,14 @@ async function runSetup(guild) {
 
   const emojis = await ensureWelcomeEmojis(guild);
 
+  // Kurulumda tüm kanal izinlerini yeniden uygula (mevcut kategori/kanal kullanılmışsa bile)
+  // Böylece önceki sisteme ait eski izinler/roller üstüne yazılır.
+  await syncPermissions(guild).catch(() => {});
+
   return {
-    erkek: erkekRol.id,
-    kadın: kadınRol.id,
-    üye: üyeRol.id,
+    erkek: erkekRol ? erkekRol.id : null,
+    kadın: kadınRol ? kadınRol.id : null,
+    üye: üyeRol ? üyeRol.id : null,
     kayitsiz: kayıtsızRol.id,
     yetkili: yetkiliRol.id,
     kategori: category,
@@ -625,31 +701,40 @@ async function runTeardown(guild) {
   const record = db.get(RECORD_KEY(guildId));
   if (!record) return null;
 
+  const errors = [];
+
   // 1) İzin kısıtlamalarını geri al
   for (const id of record.restricted || []) {
     const channel = guild.channels.cache.get(id);
     if (!channel) continue;
     try {
       await channel.permissionOverwrites.edit(record.kayitsizRoleId, { ViewChannel: null });
-    } catch {}
+    } catch (e) { errors.push(`izin geri alınamadı #${id}: ${e.message}`); }
   }
 
-  // 2) Oluşturulan kanalları sil (kategori en son silinecek şekilde ters sırada)
-  for (const id of [...(record.createdChannels || [])].reverse()) {
+  // 2) Kurulum tarafından oluşturulan kanalları sil (kategori en son silinecek şekilde ters sırada)
+  const channelIds = record.createdChannels || [];
+  for (const id of [...channelIds].reverse()) {
     const channel = guild.channels.cache.get(id);
     if (!channel) continue;
     try {
       await channel.delete("Kayıt sistemi kaldırıldı");
-    } catch {}
+    } catch (e) { errors.push(`kanal silinemedi #${id}: ${e.message}`); }
   }
 
-  // 3) Oluşturulan rolleri sil
-  for (const id of record.createdRoles || []) {
+  // 3) Kurulum tarafından oluşturulan rollerin izinlerini temizle ve sil
+  const roleIds = record.createdRoles || [];
+  const uniqueRoles = [...new Set(roleIds)];
+  for (const id of uniqueRoles) {
     const role = guild.roles.cache.get(id);
-    if (!role) continue;
+    if (!role || role.managed) continue;
     try {
+      // Rol silinemeden önce kanal izinlerinden tamamen çıkar
+      for (const ch of guild.channels.cache.values()) {
+        try { await ch.permissionOverwrites.delete(id); } catch {}
+      }
       await role.delete("Kayıt sistemi kaldırıldı");
-    } catch {}
+    } catch (e) { errors.push(`rol silinemedi ${role.name}: ${e.message}`); }
   }
 
   // 4) Veritabanını temizle
@@ -657,9 +742,10 @@ async function runTeardown(guild) {
   db.delete(RECORD_KEY(guildId));
 
   return {
-    rol: (record.createdRoles || []).length,
-    kanal: (record.createdChannels || []).length,
-    kısıt: (record.restricted || []).length
+    rol: uniqueRoles.length,
+    kanal: channelIds.length,
+    kısıt: (record.restricted || []).length,
+    errors
   };
 }
 
@@ -679,6 +765,25 @@ async function syncPermissions(guild) {
   const yetkiliRol = yetkiliId ? guild.roles.cache.get(yetkiliId) : null;
   const kayitKanal = kayitKanalId ? guild.channels.cache.get(kayitKanalId) : null;
   const everyone = guild.roles.everyone;
+
+  // Değiştirilmişse eski kayıtsız/yetkili rollerinin tüm izinlerini geri al
+  // (yeni role geçildiğinde eski rolün erişimi kalmasın)
+  const oldKayitsizId = record.kayitsizRoleId;
+  const oldYetkiliId = record.yetkiliRoleId;
+  for (const ch of guild.channels.cache.values()) {
+    try {
+      if (oldKayitsizId && oldKayitsizId !== kayitsizId) {
+        await ch.permissionOverwrites.edit(oldKayitsizId, {
+          ViewChannel: null, Connect: null, Speak: null, SendMessages: null, ReadMessageHistory: null
+        });
+      }
+      if (oldYetkiliId && oldYetkiliId !== yetkiliId && oldYetkiliId !== oldKayitsizId) {
+        await ch.permissionOverwrites.edit(oldYetkiliId, {
+          ViewChannel: null, Connect: null, ManageChannels: null, ManageMessages: null, SendMessages: null, ReadMessageHistory: null
+        });
+      }
+    } catch {}
+  }
 
   let category = kayitKanal?.parent || guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === getNames(guildId).kategori);
   if (!category) return record; // Kayıt kategorisi yok, izin senkronu gereksiz
@@ -732,8 +837,7 @@ async function syncPermissions(guild) {
     }
   }
 
-  // Kayıtsız rolü kategori dışındaki tüm kanallardan gizle; eski kayıtsız rolünün izinlerini kaldır
-  const oldKayitsizId = record.kayitsizRoleId;
+  // Kayıtsız rolü kategori dışındaki tüm kanallardan gizle
   const restricted = [];
   for (const channel of guild.channels.cache.values()) {
     if (channel.id === category.id) continue;
@@ -744,15 +848,11 @@ async function syncPermissions(guild) {
         restricted.push(channel.id);
       } catch {}
     }
-    if (oldKayitsizId && oldKayitsizId !== kayitsizRol?.id) {
-      try {
-        await channel.permissionOverwrites.edit(oldKayitsizId, { ViewChannel: null });
-      } catch {}
-    }
   }
 
   // Kayıt kaydını güncelle (teardown doğru rolü geri açsın)
   record.kayitsizRoleId = kayitsizRol?.id || oldKayitsizId;
+  record.yetkiliRoleId = yetkiliRol?.id || oldYetkiliId;
   record.restricted = restricted;
   db.set(RECORD_KEY(guildId), record);
 
@@ -768,8 +868,12 @@ module.exports = {
   PANEL_KEY,
   REGISTER_KEYS,
   NAMES_KEY,
+  TYPES_KEY,
+  DEFAULT_TYPES,
   getNames,
   setNames,
+  getTypes,
+  setTypes,
   WELCOME_EMOJI_DB,
   ensureWelcomeEmojis,
   findWelcomeEmoji,

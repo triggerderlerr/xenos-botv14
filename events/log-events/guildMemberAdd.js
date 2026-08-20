@@ -35,15 +35,23 @@ module.exports = async (client, member, reason) => {
     const kayıtsızrol = db.get(`otorol_${member.guild.id}`);
     const kayıtkanal = db.get(`kayitkanal_${member.guild.id}`);
     const kayıtgif = db.get(`kayıtgif_${member.guild.id}`);
+    const nickAktif = db.get(`nickAktif_${member.guild.id}`) !== false;
+    const nickSablon = db.get(`nickSablon_${member.guild.id}`) || "Isim | Yaş";
 
     // Kayıtsız rolünü ver - nickname/gif hataları rolü asla engellemesin
     if (kayıtsızrol && !member.roles.cache.has(kayıtsızrol)) {
       member.roles.add(kayıtsızrol).catch(() => {});
     }
 
-    try {
-      await member.setNickname("Isim | Yaş").catch(() => {});
-    } catch {}
+    // Otomatik isim verme açıksa şablona göre nickname ver (yer tutucular: {username}, {tag})
+    if (nickAktif) {
+      const nick = nickSablon
+        .split("{username}").join(member.user.username)
+        .split("{tag}").join(member.user.tag);
+      try {
+        await member.setNickname(nick).catch(() => {});
+      } catch {}
+    }
 
     if (!kayıtkanal) return;
 
@@ -85,7 +93,7 @@ module.exports = async (client, member, reason) => {
     if (karsilama.footer) embed.setFooter({ text: T(karsilama.footer) });
     if (kayıtgif) embed.setImage(`${kayıtgif}`);
 
-    member.guild.channels.cache.get(kayıtkanal)?.send({ embeds: [embed], components: [register.welcomeButtons(member.id)] }).catch(() => {});
+    member.guild.channels.cache.get(kayıtkanal)?.send({ embeds: [embed], components: [register.welcomeButtons(member.id, member.guild.id)] }).catch(() => {});
   }
 
   //==================== JOIN LOG ============================

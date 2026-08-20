@@ -18,15 +18,8 @@
   </div>
   <nav>
     <div class="grp">Yönetim</div>
-    <button data-sec="genel" class="navbtn active">
-      <span class="nv">◈</span><span>Genel</span>
-    </button>
-    <button data-sec="ayarlar" class="navbtn">
+    <button data-sec="ayarlar" class="navbtn active">
       <span class="nv">◈</span><span>Kayıt Sistemi</span>
-    </button>
-    <div class="grp">İşlemler</div>
-    <button data-sec="kayit" class="navbtn">
-      <span class="nv">◈</span><span>Kayıt Yap</span>
     </button>
   </nav>
   <div class="foot">
@@ -45,36 +38,67 @@
 
   <div id="banner" class="banner" style="display:none"></div>
 
-  <section id="sec-genel" class="active">
+  <section id="sec-ayarlar" class="active">
     <div class="grid">
+      <!-- ADIM 1: Kurulum altyapısı -->
       <div class="card">
-        <h3>Sunucu Bilgisi</h3>
-        <div id="genelInfo">Sunucu seçilmedi.</div>
+        <h3>1 · Altyapı <b>Kurulum</b></h3>
+        <div class="fldgrid trio">
+          <div class="fld"><label>Kategori adı</label><input id="fld_kategoriad" type="text" placeholder="KAYIT"></div>
+          <div class="fld"><label>Kayıt kanalı adı</label><input id="fld_kayitkanalad" type="text" placeholder="reg-chat"></div>
+          <div class="fld"><label>Teyit kanalı adı</label><input id="fld_teyitad" type="text" placeholder="Ses Teyit"></div>
+        </div>
+        <div class="actions">
+          <button class="btn dark" onclick="saveKanalAd()">Adları Kaydet</button>
+        </div>
+        <label class="toggle-row"><input type="checkbox" id="chk_nickAktif"> Yeni üyeye otomatik isim verilsin</label>
+        <label>Karşılama ismi şablonu</label>
+        <input id="fld_nickSablon" type="text" placeholder="Isim | Yaş">
+        <div class="actions">
+          <button class="btn dark" onclick="saveNick()">Nick Ayarlarını Kaydet</button>
+        </div>
+        <div class="actions" style="border-top:1px solid var(--line);padding-top:12px">
+          <button id="btnSetup" class="btn primary" onclick="setup()">Kur</button>
+          <button id="btnTeardown" class="btn dark" onclick="teardown()">Kaldır</button>
+          <button class="btn ghost" onclick="resetAll()">Sıfırla</button>
+          <button class="btn ghost" onclick="loadGuild()">Yenile</button>
+        </div>
+        <label>Sonuç</label>
+        <pre id="out">—</pre>
       </div>
-      <div class="card">
-        <h3>İstatistikler</h3>
-        <div id="genelStats">Sunucu seçilmedi.</div>
-        <div class="hint">Kayıtlar /kayıt-et komutu veya web paneli üzerinden artar.</div>
-      </div>
-    </div>
-  </section>
 
-  <section id="sec-ayarlar">
-    <div class="grid">
+      <!-- ADIM 2: Rol atamaları -->
       <div class="card">
-        <h3>Rol Atamaları</h3>
+        <h3>2 · Rol <b>Atamaları</b></h3>
         <div id="rollerBox">Sunucu seçilmedi.</div>
       </div>
+
+      <!-- ADIM 3: Kanallar -->
       <div class="card">
-        <h3>Kanallar</h3>
+        <h3>3 · <b>Kanallar</b></h3>
         <label>Kayıt Kanalı</label>
         <select id="fld_kayitkanal"></select>
         <label>Kanal Konusu (açıklama)</label>
         <input id="fld_topic" type="text" placeholder="Kayıt kanalının açıklaması...">
-        <div class="actions"><button class="btn" onclick="saveField('kayitkanal')">Kanalı Kaydet</button><button class="btn dark" onclick="saveTopic()">Konuyu Kaydet</button></div>
+        <div class="actions">
+          <button class="btn" onclick="saveField('kayitkanal')">Kanalı Kaydet</button>
+          <button class="btn dark" onclick="saveTopic()">Konuyu Kaydet</button>
+        </div>
       </div>
+
+      <!-- ADIM 4: Kayıt tipleri -->
       <div class="card">
-        <h3>Karşılama Mesajı</h3>
+        <h3>4 · Kayıt <b>Tipleri</b></h3>
+        <p class="hint" style="margin-top:0">Kapatılan tür, karşılama butonlarında görünmez ve kaydedilemez.</p>
+        <label class="toggle-row"><input type="checkbox" id="chk_erkek"> Erkek kaydı</label>
+        <label class="toggle-row"><input type="checkbox" id="chk_kadin"> Kadın kaydı</label>
+        <label class="toggle-row"><input type="checkbox" id="chk_uye"> Üye kaydı</label>
+        <div class="actions"><button class="btn primary" onclick="saveTypes()">Kayıt Tiplerini Kaydet</button></div>
+      </div>
+
+      <!-- ADIM 5: Karşılama mesajı -->
+      <div class="card">
+        <h3>5 · Karşılama <b>Mesajı</b></h3>
         <label>Başlık</label>
         <input id="w_baslik" type="text" placeholder="Boş bırakılırsa başlık gösterilmez">
         <label>Mesaj</label>
@@ -86,50 +110,12 @@
         </div>
         <div class="actions"><button class="btn primary" onclick="saveWelcome()">Karşılamayı Kaydet</button></div>
       </div>
-      <div class="card">
-        <h3>Mevcut Yapı</h3>
-        <pre id="kanalYapi">Sunucu seçilmedi.</pre>
-      </div>
-      <div class="card">
-        <h3>Kurulum Kaydı</h3>
-        <div id="kurulumKayit">Sunucu seçilmedi.</div>
-      </div>
-      <div class="card">
-        <h3>Altyapı</h3>
-        <label>Kategori adı</label>
-        <input id="fld_kategoriad" type="text" placeholder="KAYIT">
-        <label>Kayıt kanalı adı</label>
-        <input id="fld_kayitkanalad" type="text" placeholder="reg-chat">
-        <label>Teyit kanalı adı</label>
-        <input id="fld_teyitad" type="text" placeholder="Ses Teyit">
-        <div class="actions"><button class="btn dark" onclick="saveKanalAd()">Adları Kaydet</button></div>
-        <div class="actions">
-          <button id="btnSetup" class="btn primary" onclick="setup()">Kur</button>
-          <button id="btnTeardown" class="btn dark" onclick="teardown()">Kaldır</button>
-          <button class="btn ghost" onclick="resetAll()">Sıfırla</button>
-          <button class="btn ghost" onclick="loadGuild()">Yenile</button>
-        </div>
-        <label>Sonuç</label>
-        <pre id="out">—</pre>
-      </div>
-    </div>
-  </section>
 
-  <section id="sec-kayit">
-    <div class="card" style="max-width:640px">
-      <h3>Üye Kaydet</h3>
-      <label>Üye</label>
-      <input id="k_user" type="text" list="memberlist" placeholder="Ara ve seç...">
-      <datalist id="memberlist"></datalist>
-      <label>Cinsiyet</label>
-      <select id="k_cins">
-        <option value="erkek">Erkek</option>
-        <option value="kadın">Kadın</option>
-        <option value="üye">Üye</option>
-      </select>
-      <label>İsim</label>
-      <input id="k_isim" type="text" placeholder="Kayıt ismi">
-      <div class="actions"><button class="btn primary" onclick="doKayit()">Kaydet</button></div>
+      <!-- Status özeti -->
+      <div class="card">
+        <h3>Status</h3>
+        <div id="statusBox">Sunucu seçilmedi.</div>
+      </div>
     </div>
   </section>
 </main>
