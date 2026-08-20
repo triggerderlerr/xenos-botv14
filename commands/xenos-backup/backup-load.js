@@ -46,12 +46,20 @@ module.exports = {
       const botMember = await guild.members.fetch(client.user.id);
       const botRole = botMember.roles.highest;
 
-      // Mevcut rollerin silinmesi (@everyone ve bot rolü hariç)
+      // Mevcut rollerin silinmesi (@everyone, bot rolü, yönetilen roller ve bot'un üzerindeki roller hariç)
       const roles = await guild.roles.fetch();
       for (const role of roles.values()) {
-        if (role.name !== "@everyone" && role.id !== botRole.id) {
-          await role.delete().catch(err => console.error(`Rol silinemedi (${role.name}):`, err));
+        if (role.id === guild.id) continue; // @everyone
+        if (role.id === botRole.id) continue; // bot'un kendi en yüksek rolü
+        if (role.managed) {
+          console.warn(`Rol atlandı (${role.name}): entegrasyon/bot rolü olduğu için silinemedi`);
+          continue;
         }
+        if (role.position >= botRole.position) {
+          console.warn(`Rol atlandı (${role.name}): hiyerarşi kontrolü — bot'un en yüksek rolünün üstünde`);
+          continue;
+        }
+        await role.delete().catch(err => console.error(`Rol silinemedi (${role.name}):`, err));
       }
 
       // Tüm kanalların silinmesi

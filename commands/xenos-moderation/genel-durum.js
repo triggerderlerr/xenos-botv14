@@ -12,9 +12,8 @@ module.exports = {
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return interaction.reply({ content: "Bunun için gerekli yetkin yok!", ephemeral: true });
     
     let erkek = db.get(`erkek_${interaction.guild.id}`);
-    let whitelist = db.get(`erkek2_${interaction.guild.id}`);
     let kadın = db.get(`kadın_${interaction.guild.id}`);
-    let whitelist2 = db.get(`kadın2_${interaction.guild.id}`);
+    let üye = db.get(`üye_${interaction.guild.id}`);
     let regstaff = db.get(`kayityetkili_${interaction.guild.id}`);
     let kayıtsız = db.get(`otorol_${interaction.guild.id}`);
     let kayıtsızkanal = db.get(`kayitkanal_${interaction.guild.id}`);
@@ -34,9 +33,8 @@ module.exports = {
       .setTitle(`${interaction.guild.name} - Veritabanı`)
       .setDescription(`**・Kayıt Sistemi ↷**\n
         Erkek Rolü = ${erkek ? `<@&${erkek}>` : "`Ayarlanmamış ❌`"}
-        Erkek-2 Rolü = ${whitelist ? `<@&${whitelist}>` : "`Ayarlanmamış ❌`"}
         Kadın Rolü = ${kadın ? `<@&${kadın}>` : "`Ayarlanmamış ❌`"}
-        Kadın-2 Rolü = ${whitelist2 ? `<@&${whitelist2}>` : "`Ayarlanmamış ❌`"}
+        Üye Rolü = ${üye ? `<@&${üye}>` : "`Ayarlanmamış ❌`"}
         Kayıt-Yetkili Rolü = ${regstaff ? `<@&${regstaff}>` : "`Ayarlanmamış ❌`"}
         Kayıtsız Rolü = ${kayıtsız ? `<@&${kayıtsız}>` : "`Ayarlanmamış ❌`"}
         Kayıtsız Kanalı = ${kayıtsızkanal ? `<#${kayıtsızkanal}>` : "`Ayarlanmamış ❌`"}

@@ -13,9 +13,8 @@ module.exports = {
         
         const roles = [
             { key: 'erkek', label: 'Erkek Rolü', description: 'Erkek kullanıcıların sahip olduğu rol.' },
-            { key: 'erkek2', label: 'Erkek-2 Rolü', description: 'Alternatif erkek rolü.' },
             { key: 'kadın', label: 'Kadın Rolü', description: 'Kadın kullanıcıların sahip olduğu rol.' },
-            { key: 'kadın2', label: 'Kadın-2 Rolü', description: 'Alternatif kadın rolü.' },
+            { key: 'üye', label: 'Üye Rolü', description: 'Genel üyelerin sahip olduğu rol.' },
             { key: 'kayityetkili', label: 'Kayıt-Yetkili Rolü', description: 'Kayıt işlemleriyle ilgilenen yetkili rolü.' },
             { key: 'otorol', label: 'Kayıtsız Rolü', description: 'Kayıtsız kullanıcıların rolü.' },
             { key: 'kayitkanal', label: 'Kayıtsız Kanalı', description: 'Kayıtsız kullanıcıların yazabileceği kanal.' },

@@ -32,6 +32,15 @@ module.exports = {
         const işlem = interaction.options.getString("işlem");
         const rol = interaction.options.getRole('rol');
 
+        // Hiyerarşi kontrolü
+        const botHighest = interaction.guild.members.me.roles.highest;
+        if (rol.position >= botHighest.position) {
+            return interaction.reply({ content: `<@&${rol.id}> rolü bot'un en yüksek rolünün üstünde! Bot bu rolü yönetemez.`, ephemeral: true });
+        }
+        if (rol.position >= interaction.member.roles.highest.position) {
+            return interaction.reply({ content: `<@&${rol.id}> rolü kendi en yüksek rolünün üstünde! Daha alt bir rol seç.`, ephemeral: true });
+        }
+
         let successCount = 0;
         let failureCount = 0;
 

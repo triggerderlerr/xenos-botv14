@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Xenos • Kayıt Yönetim Paneli</title>
+<link rel="stylesheet" href="/web/style.css">
+</head>
+<body>
+
+<aside>
+  <div class="logo">
+    <span class="logo-icon">◈</span>
+    <span class="lt">
+      <b>Xenos</b>
+      <small>Kayıt Paneli</small>
+    </span>
+  </div>
+  <nav>
+    <div class="grp">Yönetim</div>
+    <button data-sec="genel" class="navbtn active">
+      <span class="nv">◈</span><span>Genel</span>
+    </button>
+    <button data-sec="ayarlar" class="navbtn">
+      <span class="nv">◈</span><span>Kayıt Sistemi</span>
+    </button>
+    <div class="grp">İşlemler</div>
+    <button data-sec="kayit" class="navbtn">
+      <span class="nv">◈</span><span>Kayıt Yap</span>
+    </button>
+  </nav>
+  <div class="foot">
+    <span id="userchip"></span>
+    <div id="botstatus">
+      <span class="dot"></span><span id="botstatus-txt">Bağlanıyor...</span>
+    </div>
+  </div>
+</aside>
+
+<main>
+  <div class="topbar">
+    <h1>Kayıt Sistemi <span>Yönetimi</span></h1>
+    <select id="guildsel"><option value="">- Sunucu seç -</option></select>
+  </div>
+
+  <div id="banner" class="banner" style="display:none"></div>
+
+  <section id="sec-genel" class="active">
+    <div class="grid">
+      <div class="card">
+        <h3>Sunucu Bilgisi</h3>
+        <div id="genelInfo">Sunucu seçilmedi.</div>
+      </div>
+      <div class="card">
+        <h3>İstatistikler</h3>
+        <div id="genelStats">Sunucu seçilmedi.</div>
+        <div class="hint">Kayıtlar /kayıt-et komutu veya web paneli üzerinden artar.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="sec-ayarlar">
+    <div class="grid">
+      <div class="card">
+        <h3>Rol Atamaları</h3>
+        <div id="rollerBox">Sunucu seçilmedi.</div>
+      </div>
+      <div class="card">
+        <h3>Kanallar</h3>
+        <label>Kayıt Kanalı</label>
+        <select id="fld_kayitkanal"></select>
+        <label>Kanal Konusu (açıklama)</label>
+        <input id="fld_topic" type="text" placeholder="Kayıt kanalının açıklaması...">
+        <div class="actions"><button class="btn" onclick="saveField('kayitkanal')">Kanalı Kaydet</button><button class="btn dark" onclick="saveTopic()">Konuyu Kaydet</button></div>
+      </div>
+      <div class="card">
+        <h3>Karşılama Mesajı</h3>
+        <label>Başlık</label>
+        <input id="w_baslik" type="text" placeholder="Boş bırakılırsa başlık gösterilmez">
+        <label>Mesaj</label>
+        <textarea id="w_mesaj" placeholder="Karşılama mesajı..."></textarea>
+        <label>Alt Metin (footer)</label>
+        <input id="w_footer" type="text" placeholder="İsteğe bağlı">
+        <div class="chips" style="margin-top:12px">
+          <span class="chip">{member}</span><span class="chip">{username}</span><span class="chip">{tag}</span><span class="chip">{sunucu}</span><span class="chip">{sayi}</span><span class="chip">{tarih}</span><span class="chip">{kontrol}</span>
+        </div>
+        <div class="actions"><button class="btn primary" onclick="saveWelcome()">Karşılamayı Kaydet</button></div>
+      </div>
+      <div class="card">
+        <h3>Mevcut Yapı</h3>
+        <pre id="kanalYapi">Sunucu seçilmedi.</pre>
+      </div>
+      <div class="card">
+        <h3>Kurulum Kaydı</h3>
+        <div id="kurulumKayit">Sunucu seçilmedi.</div>
+      </div>
+      <div class="card">
+        <h3>Altyapı</h3>
+        <label>Kategori adı</label>
+        <input id="fld_kategoriad" type="text" placeholder="KAYIT">
+        <label>Kayıt kanalı adı</label>
+        <input id="fld_kayitkanalad" type="text" placeholder="reg-chat">
+        <label>Teyit kanalı adı</label>
+        <input id="fld_teyitad" type="text" placeholder="Ses Teyit">
+        <div class="actions"><button class="btn dark" onclick="saveKanalAd()">Adları Kaydet</button></div>
+        <div class="actions">
+          <button id="btnSetup" class="btn primary" onclick="setup()">Kur</button>
+          <button id="btnTeardown" class="btn dark" onclick="teardown()">Kaldır</button>
+          <button class="btn ghost" onclick="resetAll()">Sıfırla</button>
+          <button class="btn ghost" onclick="loadGuild()">Yenile</button>
+        </div>
+        <label>Sonuç</label>
+        <pre id="out">—</pre>
+      </div>
+    </div>
+  </section>
+
+  <section id="sec-kayit">
+    <div class="card" style="max-width:640px">
+      <h3>Üye Kaydet</h3>
+      <label>Üye</label>
+      <input id="k_user" type="text" list="memberlist" placeholder="Ara ve seç...">
+      <datalist id="memberlist"></datalist>
+      <label>Cinsiyet</label>
+      <select id="k_cins">
+        <option value="erkek">Erkek</option>
+        <option value="kadın">Kadın</option>
+        <option value="üye">Üye</option>
+      </select>
+      <label>İsim</label>
+      <input id="k_isim" type="text" placeholder="Kayıt ismi">
+      <div class="actions"><button class="btn primary" onclick="doKayit()">Kaydet</button></div>
+    </div>
+  </section>
+</main>
+
+<div id="loginbar" class="overlay" style="display:none">
+  <div class="box">
+    <h2>Giriş Gerekli</h2>
+    <p>Panele erişmek için Discord hesabınla giriş yap.</p>
+    <a class="btn primary" href="/login">Discord ile Giriş</a>
+  </div>
+</div>
+
+<div id="tokenbar" class="overlay" style="display:none">
+  <div class="box">
+    <h2>Token Girişi</h2>
+    <p>Pano erişim kodunu gir ve giriş yap.</p>
+    <input id="tokinput" type="text" placeholder="Panel tokenı" autocomplete="off">
+    <div class="actions" style="justify-content:center">
+      <button class="btn primary" onclick="saveToken()">Giriş Yap</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="/web/app.js"></script>
+</body>

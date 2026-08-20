@@ -11,9 +11,9 @@ const INTENTS = Object.values(GatewayIntentBits);
 const PARTIALS = Object.values(Partials);
 const db = require("croxydb");
 const moment = require('moment');
-const config = require('../../utils/constants/config.json');
 const messages = require('../../utils/constants/messages');
 const embedBuilder = require('../../utils/helpers/embeds');
+const register = require('../../utils/register-system');
 
 //======================= KAYIT SİSTEMİ =============================
 
@@ -27,8 +27,8 @@ module.exports = async (client, member, reason) => {
     const bot = db.get(`statkanal3_${member.guild.id}`) || "";
 
     if (toplam) member.guild.channels.cache.get(toplam)?.setName(`💜 Toplam ${member.guild.memberCount}`).catch(() => {});
-    if (uye) member.guild.channels.cache.get(uye)?.setName(`💜 Üye ${member.guild.members.cache.filter((m) => !m.user.bot).size}`).catch(() => {});
-    if (bot) member.guild.channels.cache.get(bot)?.setName(`🤖 Bot - ${member.guild.members.cache.filter(m => m.user.bot).size}`).catch(() => {});
+    if (uye) member.guild.channels.cache.get(uye)?.setName(`💜 Üye ${member.guild.members.cache.filter((m) => m.user && !m.user.bot).size}`).catch(() => {});
+    if (bot) member.guild.channels.cache.get(bot)?.setName(`🤖 Bot - ${member.guild.members.cache.filter(m => m.user && m.user.bot).size}`).catch(() => {});
   }
 
   if (kayıtknl) {
@@ -50,21 +50,42 @@ module.exports = async (client, member, reason) => {
     const avatar = client.user.displayAvatarURL({ dynamic: true });
     const username = client.user.username;
 
-    const rightarrow = member.guild.emojis.cache.find(emoji => emoji.name === config.rightarrow);
-    const verify = member.guild.emojis.cache.find(emoji => emoji.name === config.verify);
+    const rightarrow = await register.findWelcomeEmoji(member.guild, "arrow");
+    const verify = await register.findWelcomeEmoji(member.guild, "verify");
 
     const kurulus = Date.now() - member.user.createdTimestamp;
     const ayyy = moment.duration(kurulus).format("M");
-    let kontrol = ayyy < 1 ? `   \Şüpheli ❌\ ` : `   \Güvenilir ✅\ `;
+    let kontrol = ayyy < 1 ? `Şüpheli ❌` : `Güvenilir ✅`;
+
+    // Karşılama mesajı şablonu (web panelinden düzenlenebilir)
+    const karsilama = db.get(`karsilama_${member.guild.id}`) || {};
+    const T = (s) => String(s || "")
+      .split("{member}").join(`<@${member.user.id}>`)
+      .split("{username}").join(member.user.username)
+      .split("{tag}").join(member.user.tag)
+      .split("{sunucu}").join(member.guild.name)
+      .split("{sayi}").join(member.guild.memberCount)
+      .split("{tarih}").join(moment.utc(member.user.createdAt).format('DD.MM.YY'))
+      .split("{kontrol}").join(kontrol);
+
+    const defaultDesc =
+      "Merhaba {member}, Sunucuya **Hoşgeldin!**\n\n" +
+      "• Seninle Beraber **{sayi}** Kişiyiz.\n" +
+      "• Kayıt Olmak Için **Ses Teyit** Odalarından Birine Geçip Bekleyiniz.\n" +
+      "• Kayıt Tarihi: **{tarih}**\n" +
+      "• Bu Hesap **{kontrol}**\n" +
+      "• **Bol keyifli zaman geçirmeniz dileğiyle..**";
 
     const embed = new EmbedBuilder()
       .setColor("Random")
       .setAuthor({ name: `${username}`, iconURL: `${avatar}`, url: 'https://discord.gg/zGwFVQkX' })
-      .setDescription(`<@${member.user.id}>, Aramıza **Hoşgeldin!**\n\n• Seninle Beraber **${member.guild.memberCount}** Kişiyiz.\n• Kayıt Olmak Için **Ses Teyit** Odalarından Birine Geçip Bekleyiniz.\n• Kayıt Tarihi: **${moment.utc(member.user.createdAt).format('DD.MM.YY')}**\n• Bu Hesap **${kontrol}**\n• **Bol keyifli zaman geçirmeniz dileğiyle..**`, true)
+      .setDescription(karsilama.mesaj ? T(karsilama.mesaj) : T(defaultDesc))
       .setTimestamp();
+    if (karsilama.baslik) embed.setTitle(T(karsilama.baslik));
+    if (karsilama.footer) embed.setFooter({ text: T(karsilama.footer) });
     if (kayıtgif) embed.setImage(`${kayıtgif}`);
 
-    member.guild.channels.cache.get(kayıtkanal)?.send({ embeds: [embed] }).catch(() => {});
+    member.guild.channels.cache.get(kayıtkanal)?.send({ embeds: [embed], components: [register.welcomeButtons(member.id)] }).catch(() => {});
   }
 
   //==================== JOIN LOG ============================

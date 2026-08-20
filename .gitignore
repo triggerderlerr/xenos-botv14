@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+npm-error.log*
+
+# Database files
+*.db
+*.sqlite
+*.json.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+temp/
+tmp/

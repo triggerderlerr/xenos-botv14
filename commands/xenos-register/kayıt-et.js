@@ -1,7 +1,7 @@
 const { PermissionsBitField, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require("discord.js");
 const db = require("croxydb");
-const config = require('../../utils/constants/config.json');
 const messages = require('../../utils/constants/messages');
+const register = require('../../utils/register-system');
 
 module.exports = {
     name: "kayıt",
@@ -20,7 +20,8 @@ module.exports = {
             type: 3,
             choices: [
                 { name: "Kadın", value: "kadın" },
-                { name: "Erkek", value: "erkek" }
+                { name: "Erkek", value: "erkek" },
+                { name: "Üye", value: "üye" }
             ],
             required: true
         },
@@ -42,22 +43,21 @@ module.exports = {
         const getName = interaction.options.getString('isim');
         const cinsiyet = interaction.options.getString('cinsiyet');
 
-        let rol, whitelist, kayıtsız, kayıtkanal, kayıtgif;
+        let rol, kayıtsız, kayıtkanal, kayıtgif;
 
         if (cinsiyet === "kadın") {
             rol = db.fetch(`kadın_${interaction.guild.id}`);
-            whitelist = db.fetch(`kadın2_${interaction.guild.id}`);
+        } else if (cinsiyet === "üye") {
+            rol = db.fetch(`üye_${interaction.guild.id}`);
         } else {
             rol = db.fetch(`erkek_${interaction.guild.id}`);
-            whitelist = db.fetch(`erkek2_${interaction.guild.id}`);
         }
 
         kayıtsız = db.fetch(`otorol_${interaction.guild.id}`);
         kayıtkanal = db.get(`kayitkanal_${interaction.guild.id}`);
         kayıtgif = db.get(`kayıtgif_${interaction.guild.id}`);
         
-        if (!rol) return interaction.reply(`${cinsiyet === "kadın" ? "Kadın" : "Erkek"} rolü ayarlanmamış!`);
-        if (!whitelist) return interaction.reply("Whitelist rolü ayarlanmamış!");
+        if (!rol) return interaction.reply(`${cinsiyet === "kadın" ? "Kadın" : cinsiyet === "üye" ? "Üye" : "Erkek"} rolü ayarlanmamış!`);
         if (!kayıtsız) return interaction.reply("Kayıtsız rolü ayarlanmamış!");
         if (!kayıtkanal) return interaction.reply("Kayıt kanalı ayarlanmamış!");
 
@@ -72,29 +72,39 @@ module.exports = {
         }, 500);
         
         setTimeout(() => {
-            interaction.guild.members.cache.get(getUser.id)?.roles.add([rol, whitelist]).catch(() => {});
+            interaction.guild.members.cache.get(getUser.id)?.roles.add(rol).catch(() => {});
         }, 1500);
         
         setTimeout(() => {
             interaction.guild.members.cache.get(getUser.id)?.roles.remove(kayıtsız).catch(() => {});
         }, 2500);
 
-        const sonsuz = client.emojis.cache.find(emoji => emoji.name === config.infinity);
+        const sonsuz = await register.findWelcomeEmoji(interaction.guild, "infinity");
         
         const embed = new EmbedBuilder()
             .setColor('Random')
             .setThumbnail(cinsiyet === "kadın" ? 
                 "https://cdn.discordapp.com/attachments/1188118049887367168/1242067305362358302/Custom-Icon-Design-Flatastic-7-Female.512.png?ex=664c7cd2&is=664b2b52&hm=0bf5486b1664455a5b285ca35804458763bd0b92b89d255b19c3d39b45589114&" : 
+                cinsiyet === "üye" ?
+                "https://cdn.discordapp.com/attachments/1188118049887367168/1251222509811007568.webp?size=96&quality=lossless" :
                 "https://cdn.discordapp.com/attachments/1188118049887367168/1242065418621947975/male-symbol-blue-icon.png?ex=664c7b10&is=664b2990&hm=305860cea743814cda8dd232942cece77d54d5bd4008b21fef90bce43b77a98a&")
             .setDescription(`${sonsuz} ‍ **${interaction.guild.name}** ‍ ${sonsuz}
    
    • Kayıt edilen **kullanıcı**: <@${getUser.id}>\n     
    • Kayıt işleminde **verilen isim**: ${setName}\n
-   • Kayıt işleminde **verilen rol**: <@&${rol}> **-** <@&${whitelist}>\n
+   • Kayıt işleminde **verilen rol**: <@&${rol}>\n
    • Kayıt işleminde **alınan rol**: <@&${kayıtsız}>
    `)
             .setFooter({ text: `Komutu kullanan yetkili : ${interaction.user.tag}`, iconURL: `${interaction.user.displayAvatarURL({ dynamic: true })}` });
         if (kayıtgif) embed.setImage(`${kayıtgif}`);
+
+        // Kayıt sayacı
+        const stat = db.get(`kayitstat_${interaction.guild.id}`) || { erkek: 0, kadın: 0, üye: 0, toplam: 0 };
+        if (cinsiyet === "kadın") stat.kadın++;
+        else if (cinsiyet === "üye") stat.üye++;
+        else stat.erkek++;
+        stat.toplam++;
+        db.set(`kayitstat_${interaction.guild.id}`, stat);
 
         interaction.reply({ embeds: [embed] });
     }

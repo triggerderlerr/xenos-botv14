@@ -4,5 +4,10 @@
     "guildname": "TriggerX",
     "rightarrow": "rightarrow1",
     "verify": "verify1",
-    "infinity": "infinity1"
+    "infinity": "infinity1",
+    "welcomeEmojis": {
+        "arrow": "https://cdn.discordapp.com/emojis/1339761281908998175.webp?size=96&animated=true",
+        "verify": "https://cdn.discordapp.com/emojis/888191297737871450.webp?size=96&animated=true",
+        "infinity": "https://cdn.discordapp.com/emojis/1339761284660465706.webp?size=96&animated=true"
+    }
 }
