@@ -20,7 +20,7 @@ class MusicManager {
     this.initPromise = this.ensureYtDlpBinary();
   }
 
-  // İşletim sistemine uygun binary yolunu belirler (Windows & Linux / Render.com uyumlu)
+  // İşletim sistemine uygun binary yolunu belirler
   resolveYtDlpBinary() {
     const isWin = process.platform === 'win32';
     const localBinDir = path.join(__dirname, '../../bin');
@@ -33,7 +33,6 @@ class MusicManager {
       return localBin;
     }
 
-    // Windows WinGet yolu varsa kontrol et
     if (isWin && process.env.LOCALAPPDATA) {
       const wingetPath = path.join(process.env.LOCALAPPDATA, 'Microsoft\\WinGet\\Packages\\yt-dlp.yt-dlp_Microsoft.Winget.Source_8wekyb3d8bbwe\\yt-dlp.exe');
       if (fs.existsSync(wingetPath)) {
@@ -44,7 +43,7 @@ class MusicManager {
     return localBin;
   }
 
-  // Binary yoksa doğrudan GitHub CDN'den stream olarak indirir (API rate limit YOKTUR)
+  // Binary yoksa doğrudan GitHub CDN'den stream olarak indirir
   async ensureYtDlpBinary() {
     if (fs.existsSync(this.binaryPath)) {
       return this.binaryPath;
@@ -93,10 +92,15 @@ class MusicManager {
     }
   }
 
-  getDenoPath() {
-    if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
-      const winDeno = path.join(process.env.LOCALAPPDATA, 'Microsoft\\WinGet\\Packages\\DenoLand.Deno_Microsoft.Winget.Source_8wekyb3d8bbwe\\deno.exe');
-      if (fs.existsSync(winDeno)) return winDeno;
+  getCookiePath() {
+    // Proje dizininde veya root'ta cookies.txt varsa kullan
+    const possiblePaths = [
+      path.join(__dirname, '../../cookies.txt'),
+      path.join(__dirname, '../cookies.txt'),
+      path.join(process.cwd(), 'cookies.txt')
+    ];
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) return p;
     }
     return null;
   }
@@ -109,26 +113,80 @@ class MusicManager {
     return this.queues.get(guildId);
   }
 
-  // yt-dlp ile arama veya link çözme (Token gerektirmez!)
+  // Token olmadan Spotify/YouTube linklerinden başlık çözme (Resmi oEmbed API)
+  async resolveLinkMetadata(url) {
+    if (/spotify\.com/i.test(url)) {
+      try {
+        const res = await axios.get(`https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`, { timeout: 5000 });
+        if (res.data && res.data.title) {
+          return res.data.title;
+        }
+      } catch (_) {}
+    }
+
+    if (/youtube\.com|youtu\.be/i.test(url)) {
+      try {
+        const res = await axios.get(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`, { timeout: 5000 });
+        if (res.data && res.data.title) {
+          return `${res.data.title} ${res.data.author_name || ''}`.trim();
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
+  // Akıllı Arama & Çözme (SoundCloud + YouTube + Fallback)
   async searchOrResolve(query) {
     await this.initPromise;
 
-    return new Promise((resolve, reject) => {
-      const isUrl = /^https?:\/\//i.test(query);
-      const searchTarget = isUrl ? query : `ytsearch1:${query}`;
+    const isUrl = /^https?:\/\//i.test(query.trim());
+    let target = query.trim();
 
+    // Link ise ve YouTube veya Spotify ise meta verisini çıkarıp gerekirse fallback yapacağız
+    const linkMeta = isUrl ? await this.resolveLinkMetadata(target) : null;
+
+    // Arama hedefi: Link değilse varsayılan olarak SoundCloud aratılır (Datacenter IP engeli YOKTUR)
+    // Eğer bir link ise doğrudan o link çözülmeye çalışılır
+    const primaryTarget = isUrl ? target : `scsearch1:${target}`;
+
+    try {
+      return await this.fetchMetadata(primaryTarget);
+    } catch (primaryErr) {
+      // Eğer YouTube linki bot doğrulamasına (Sign in) takıldıysa ve video adı biliniyorsa SoundCloud'dan bul ve çal!
+      if (linkMeta) {
+        console.log(`[MUSIC] Link koruması aşılamadı, parça adına göre SoundCloud üzerinden aranıyor: "${linkMeta}"`);
+        try {
+          return await this.fetchMetadata(`scsearch1:${linkMeta}`);
+        } catch (secondaryErr) {
+          throw new Error(`Parça bulunamadı. (${primaryErr.message})`);
+        }
+      }
+
+      // Eğer SoundCloud'da bulunamadıysa YouTube aramasını dene
+      if (!isUrl) {
+        try {
+          return await this.fetchMetadata(`ytsearch1:${target}`);
+        } catch (_) {}
+      }
+
+      throw primaryErr;
+    }
+  }
+
+  fetchMetadata(target) {
+    return new Promise((resolve, reject) => {
       const args = [
-        searchTarget,
+        target,
         '--dump-single-json',
         '--flat-playlist',
         '--no-warnings',
-        '--default-search', 'ytsearch',
         '--skip-download'
       ];
 
-      const deno = this.getDenoPath();
-      if (deno) {
-        args.push('--js-runtimes', `deno:${deno}`);
+      const cookieFile = this.getCookiePath();
+      if (cookieFile) {
+        args.push('--cookies', cookieFile);
       }
 
       const proc = spawn(this.binaryPath, args);
@@ -140,7 +198,7 @@ class MusicManager {
 
       proc.on('close', code => {
         if (code !== 0 || !stdout.trim()) {
-          return reject(new Error(stderr || 'Şarkı bulunamadı.'));
+          return reject(new Error(stderr.trim() || 'Şarkı bulunamadı.'));
         }
 
         try {
@@ -153,7 +211,7 @@ class MusicManager {
             url: entry.webpage_url || entry.url || `https://www.youtube.com/watch?v=${entry.id}`,
             duration: entry.duration_string || (entry.duration ? `${Math.floor(entry.duration / 60)}:${('0' + (entry.duration % 60)).slice(-2)}` : 'Canlı Yayın (Radyo)'),
             thumbnail: entry.thumbnail || (entry.thumbnails && entry.thumbnails[0]?.url) || null,
-            uploader: entry.uploader || entry.channel || 'Sanatçı / İstasyon',
+            uploader: entry.uploader || entry.channel || entry.artist || 'Sanatçı / İstasyon',
             id: entry.id,
             isLive: entry.is_live || !entry.duration
           });
@@ -164,7 +222,7 @@ class MusicManager {
     });
   }
 
-  // Doğrudan ses URL'sini al (Normal videolar + Canlı Yayın / HLS Radyo uyumlu)
+  // Doğrudan ses URL'sini al
   async getDirectAudioUrl(targetUrl) {
     await this.initPromise;
 
@@ -176,9 +234,9 @@ class MusicManager {
         '--no-warnings'
       ];
 
-      const deno = this.getDenoPath();
-      if (deno) {
-        args.push('--js-runtimes', `deno:${deno}`);
+      const cookieFile = this.getCookiePath();
+      if (cookieFile) {
+        args.push('--cookies', cookieFile);
       }
 
       const proc = spawn(this.binaryPath, args);
@@ -191,14 +249,14 @@ class MusicManager {
       proc.on('close', code => {
         const directUrl = stdout.trim().split('\n')[0];
         if (code !== 0 || !directUrl) {
-          return reject(new Error(stderr || 'Ses akış URLsi alınamadı.'));
+          return reject(new Error(stderr.trim() || 'Ses akış URLsi alınamadı.'));
         }
         resolve(directUrl.trim());
       });
     });
   }
 
-  // FFmpeg ile doğrudan decode edilmiş canlı PCM stream üretimi
+  // FFmpeg ile decode edilmiş PCM stream
   createStreamFromUrl(directAudioUrl) {
     const ffmpegProc = spawn(this.getFfmpegPath(), [
       '-reconnect', '1',
@@ -217,7 +275,6 @@ class MusicManager {
     return ffmpegProc.stdout;
   }
 
-  // Buton satırını üretir
   getControlRow(queue) {
     const isPaused = queue ? queue.paused : false;
     const isLoop = queue ? queue.loop : false;
@@ -251,7 +308,6 @@ class MusicManager {
     );
   }
 
-  // Şarkıyı oynatır
   async play(guild, channel, textChannel, song) {
     let queue = this.queues.get(guild.id);
 
