@@ -3,7 +3,7 @@ const musicManager = require('../../utils/music/MusicManager');
 
 module.exports = {
   name: 'play',
-  description: 'İstediğiniz şarkıyı çalar (API token gerektirmez).',
+  description: 'İstediğiniz şarkıyı veya canlı radyoyu çalar.',
   type: 1,
   options: [
     {

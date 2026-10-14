@@ -263,7 +263,7 @@ class MusicManager {
         )
         .setThumbnail(song.thumbnail)
         .setTimestamp()
-        .setFooter({ text: 'Xenos Müzik Sistemi • API Token Gerektirmez' });
+        .setFooter({ text: 'Xenos Müzik', iconURL: guild.iconURL() || undefined });
 
       const row = this.getControlRow(queue);
 
