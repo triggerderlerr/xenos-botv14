@@ -15,27 +15,26 @@ module.exports = {
   ],
 
   run: async (client, interaction) => {
+    // Discord 3 saniyelik limitini anında uzatmak için ilk işlem deferReply() olmalıdır
+    await interaction.deferReply();
+
     const { member, guild, channel } = interaction;
-    const voiceChannel = member.voice.channel;
+    const voiceChannel = member.voice?.channel;
 
     if (!voiceChannel) {
-      return interaction.reply({
+      return interaction.editReply({
         content: '🚫 | Müzik çalabilmek için bir ses kanalında bulunmalısınız!',
-        ephemeral: true,
       });
     }
 
     const permissions = voiceChannel.permissionsFor(guild.members.me);
     if (!permissions.has(PermissionsBitField.Flags.Connect) || !permissions.has(PermissionsBitField.Flags.Speak)) {
-      return interaction.reply({
+      return interaction.editReply({
         content: '🚫 | Ses kanalına katılmak ve konuşmak için yetkim bulunmuyor!',
-        ephemeral: true,
       });
     }
 
     const query = interaction.options.getString('şarkı');
-
-    await interaction.deferReply();
 
     try {
       const songInfo = await musicManager.searchOrResolve(query);
@@ -62,7 +61,7 @@ module.exports = {
             { name: '👤 İsteyen', value: `<@${interaction.user.id}>`, inline: true }
           )
           .setThumbnail(song.thumbnail)
-          .setFooter({ text: 'Xenos Müzik Sistemi' });
+          .setFooter({ text: 'Xenos Müzik' });
 
         return interaction.editReply({
           embeds: [queueEmbed],

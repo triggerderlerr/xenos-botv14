@@ -85,9 +85,10 @@ module.exports = async (client, interaction) => {
         }
     } catch (err) {
         console.error(err);
-        return interaction.reply({ 
-            content: messages.ERRORS.COMMAND_ERROR,
-            ephemeral: true 
-        });
+        if (interaction.deferred || interaction.replied) {
+            return interaction.followUp({ content: messages.ERRORS.COMMAND_ERROR, ephemeral: true }).catch(() => {});
+        } else {
+            return interaction.reply({ content: messages.ERRORS.COMMAND_ERROR, ephemeral: true }).catch(() => {});
+        }
     }
 };

@@ -9,8 +9,8 @@ const {
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
 const ffmpegStatic = require('ffmpeg-static');
-const YTDlpWrap = require('yt-dlp-wrap').default;
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 class MusicManager {
@@ -44,23 +44,51 @@ class MusicManager {
     return localBin;
   }
 
-  // Binary yoksa (özellikle Render.com gibi sunucularda) GitHub'dan otomatik indirir
+  // Binary yoksa doğrudan GitHub CDN'den stream olarak indirir (API rate limit YOKTUR)
   async ensureYtDlpBinary() {
     if (fs.existsSync(this.binaryPath)) {
       return this.binaryPath;
     }
 
-    console.log(`[MUSIC] yt-dlp binary bulunamadı, platforma (${process.platform}) uygun sürüm indiriliyor: ${this.binaryPath}`);
+    const isWin = process.platform === 'win32';
+    const url = isWin
+      ? 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe'
+      : 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
+
+    console.log(`[MUSIC] yt-dlp binary indiriliyor (${process.platform}): ${this.binaryPath}`);
+
     try {
-      await YTDlpWrap.downloadFromGithub(this.binaryPath);
-      if (process.platform !== 'win32') {
-        fs.chmodSync(this.binaryPath, 0o755);
-      }
-      console.log('[MUSIC] yt-dlp başarıyla indirildi ve hazırlandı.');
+      const response = await axios({
+        method: 'GET',
+        url: url,
+        responseType: 'stream',
+        maxRedirects: 10,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+
+      const writer = fs.createWriteStream(this.binaryPath);
+      response.data.pipe(writer);
+
+      await new Promise((resolve, reject) => {
+        writer.on('finish', () => {
+          try {
+            if (!isWin) {
+              fs.chmodSync(this.binaryPath, 0o755);
+            }
+            console.log('[MUSIC] yt-dlp başarıyla indirildi ve hazırlandı.');
+            resolve();
+          } catch (e) {
+            reject(e);
+          }
+        });
+        writer.on('error', reject);
+      });
+
       return this.binaryPath;
     } catch (err) {
       console.error('[MUSIC] yt-dlp indirilirken hata:', err.message);
-      // Sistemde kurulu yt-dlp komutunu dene
       return 'yt-dlp';
     }
   }

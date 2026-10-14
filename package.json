@@ -4,7 +4,8 @@
   "description": "Discord.JS v14 Slash Uyumlu Altyapı",
   "main": "index.js",
   "scripts": {
-    "build": "npm install",
+    "postinstall": "node ./scripts/prepare-music.js",
+    "build": "npm install && node ./scripts/prepare-music.js",
     "start": "node --trace-warnings index.js"
   },
   "author": "triggerX",
