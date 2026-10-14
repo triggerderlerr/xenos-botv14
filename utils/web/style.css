@@ -1,300 +1,536 @@
-/* ===== Koyu Monokrom (mat siyah/gri) ===== */
-:root{
-  --base:#0b0b0c;
-  --base2:#121214;
-  --base3:#1a1a1d;
-  --line:#1f1f23;
-  --line2:#2a2a2e;
-  --txt:#c9c9cd;
-  --muted:#8a8a90;
-  --dim:#5f5f66;
-  --acc:#d7d7db;          /* tek vurgu rengi: açık gri (nadiren) */
-  --ok:#7d7d83;
-  --bad:#3a3a3e;
-  --radius-box:14px;
-  --radius-field:10px;
-  --radius-selector:8px;
-  --border:1px;
+/* =========================================
+   iOS / Apple Sistem Ayarları Teması
+   ========================================= */
+
+:root {
+  /* Saf Siyah ve Koyu Griler (OLED iOS Hissiyatı) */
+  --bg-main: #000000;
+  --bg-panel: #1C1C1E; /* iOS Ayarlar Kart Rengi */
+  --bg-input: #2C2C2E;
+  
+  --border-color: rgba(84, 84, 88, 0.45); /* İnce, belli belirsiz ayırıcı çizgi */
+  
+  --text-title: #FFFFFF;
+  --text-main: #FFFFFF;
+  --text-muted: rgba(235, 235, 245, 0.6);
+  
+  --primary: #0A84FF; /* iOS Mavi */
+  --success: #32D74B; /* iOS Yeşil */
+  --danger: #FF453A;  /* iOS Kırmızı */
+  
+  --radius-sm: 8px;
+  --radius-md: 14px; /* Apple'ın ikonik yumuşak köşe yarıçapı */
+  --radius-lg: 20px;
+  
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{font-family:'Segoe UI Variable Display','Segoe UI',system-ui,sans-serif;font-weight:600;letter-spacing:.2px;background:var(--base);color:var(--txt);min-height:100vh;display:flex}
-/* ================= MENÜ / KENAR ÇUBUĞU ================= */
-aside{
-  width:250px;
-  flex:none;
-  background:var(--base2);
-  border-right:var(--border) solid var(--line);
-  display:flex;
-  flex-direction:column;
-  position:sticky;
-  top:0;
-  height:100vh;
-  overflow:hidden;
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
-aside .logo{
-  display:flex;
-  align-items:center;
-  gap:11px;
-  padding:18px 20px;
-  border-bottom:var(--border) solid var(--line);
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  display: flex;
+  min-height: 100vh;
+  font-size: 15px; /* iOS'te fontlar biraz daha etlidir */
+  -webkit-font-smoothing: antialiased;
 }
-aside .logo .logo-icon{
-  width:36px;height:36px;
-  flex:none;
-  border-radius:var(--radius-selector);
-  background:var(--base3);
-  border:var(--border) solid var(--line2);
-  display:flex;align-items:center;justify-content:center;
-  font-size:16px;
-  filter:grayscale(1);
-  opacity:.9;
+
+/* ================= SIDEBAR ================= */
+.sidebar {
+  width: 270px;
+  background-color: var(--bg-main);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
 }
-aside .logo .lt{display:flex;flex-direction:column;line-height:1.15}
-aside .logo b{font-size:16px;font-weight:800;color:var(--txt);letter-spacing:.5px}
-aside .logo small{font-size:10.5px;color:var(--dim);letter-spacing:2.2px;text-transform:uppercase;font-weight:600;margin-top:2px}
-aside nav{
-  flex:1;
-  padding:16px 12px;
-  overflow-y:auto;
-  display:flex;
-  flex-direction:column;
-  gap:2px;
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 36px 24px 20px;
 }
-nav .grp{
-  font-size:10.5px;
-  color:var(--dim);
-  letter-spacing:2px;
-  text-transform:uppercase;
-  padding:16px 10px 7px;
-  font-weight:700;
-  user-select:none;
+
+.logo-icon {
+  width: 36px;
+  height: 36px;
+  background: var(--primary);
+  color: #FFF;
+  border-radius: 10px; /* iOS App icon stili */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-nav .grp:first-child{padding-top:0}
-nav .navbtn{
-  position:relative;
-  display:flex;align-items:center;gap:12px;
-  width:100%;
-  padding:9px 11px;
-  border:none;
-  border-radius:var(--radius-selector);
-  background:transparent;
-  color:var(--muted);
-  font-size:13.5px;
-  font-weight:600;
-  font-family:inherit;
-  cursor:pointer;
-  transition:background-color .15s,color .15s,border-color .15s;
-  border-left:2px solid transparent;
+
+.logo-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
 }
-nav .navbtn:hover{background:var(--base3);color:var(--txt)}
-nav .navbtn.active{
-  background:var(--base3);
-  color:var(--txt);
-  border-left-color:var(--acc);
+
+.logo-text b {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
 }
-nav .navbtn .nv{
-  width:26px;height:26px;
-  flex:none;
-  border-radius:7px;
-  border:var(--border) solid var(--line2);
-  background:var(--base2);
-  display:flex;align-items:center;justify-content:center;
-  font-size:13px;
-  filter:grayscale(1);
+
+.logo-text span {
+  font-size: 13px;
+  color: var(--text-muted);
 }
-nav .navbtn.active .nv{background:var(--base2);border-color:var(--acc);opacity:.95}
-nav .navbtn .tag{
-  margin-left:auto;
-  font-size:9.5px;
-  font-weight:800;
-  letter-spacing:.6px;
-  text-transform:uppercase;
-  color:var(--dim);
-  background:var(--base2);
-  border:var(--border) solid var(--line);
-  padding:2px 7px;
-  border-radius:99px;
+
+.nav-menu {
+  flex: 1;
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
-aside .foot{
-  padding:14px 16px;
-  border-top:var(--border) solid var(--line);
-  display:flex;flex-direction:column;gap:10px;
+
+.nav-group {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding: 24px 12px 8px;
 }
-aside .foot #userchip{font-size:12.5px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-aside .foot #botstatus{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted)}
-aside .foot #botstatus .dot{width:7px;height:7px;border-radius:99px;background:var(--dim);flex:none}
-aside .foot #botstatus.on .dot{background:var(--acc);box-shadow:0 0 7px rgba(215,215,219,.25)}
-aside .foot #botstatus.off .dot{background:#55555c;box-shadow:0 0 7px none}
-aside .foot #botstatus.warn .dot{background:#9b9ba2}
-/* ================= ANA İÇERİK ================= */
-main{flex:1;padding:22px 26px;width:100%;min-width:0;max-width:1920px;margin:0 auto}
-.topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:20px;flex-wrap:wrap}
-.topbar h1{font-size:19px;font-weight:700;color:var(--txt);letter-spacing:.2px}
-.topbar h1 span{color:var(--dim);font-weight:600}
-.topbar select{width:auto;min-width:200px}
-/* ================= FORM / GİRİŞLER ================= */
-select,input[type=text],textarea{
-  width:100%;
-  max-width:340px;
-  background-color:var(--base2);
-  color:var(--txt);
-  border:var(--border) solid var(--line2);
-  border-radius:var(--radius-field);
-  padding:.45rem .7rem;
-  font-size:13px;
-  font-weight:600;
-  font-family:inherit;
-  transition:border-color .15s,box-shadow .15s;
-  outline:none;
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
 }
-select:hover,input[type=text]:hover,textarea:hover{border-color:#33333a}
-select:focus,input[type=text]:focus,textarea:focus{border-color:#50505a;box-shadow:0 0 0 2px rgba(120,120,130,.12)}
-::selection{background:#3a3a42;color:#cfcfd4}
-textarea{min-height:110px;max-height:300px;resize:vertical;line-height:1.55}
-label{display:block;font-size:12px;color:var(--muted);margin:11px 0 5px;font-weight:500}
-.fldgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
-.fldgrid .fld{display:flex;flex-direction:column}
-.fldgrid.trio{grid-template-columns:1fr 1fr 1fr}
-@media (max-width:1200px){.fldgrid,.fldgrid.trio{grid-template-columns:1fr}}
-/* ================= BUTONLAR ================= */
-.btn{
-  height:2.1rem;
-  padding:0 .85rem;
-  background-color:var(--base3);
-  color:var(--txt);
-  border:var(--border) solid var(--line2);
-  border-radius:var(--radius-selector);
-  font-size:13px;
-  font-weight:600;
-  cursor:pointer;
-  font-family:inherit;
-  display:inline-flex;align-items:center;justify-content:center;gap:7px;
-  transition:background-color .15s,border-color .15s,color .15s;
+
+.nav-item:hover {
+  background: var(--bg-panel);
 }
-.btn:hover{background-color:#232328;border-color:#3a3a42}
-.btn:active{transform:translateY(0)}
-.btn:disabled{opacity:.4;cursor:not-allowed}
-.btn.primary{background-color:var(--txt);border-color:var(--txt);color:var(--base)}
-.btn.primary:hover{background-color:#b8b8bf;border-color:#b8b8bf}
-.btn.ghost{background:transparent;border-color:var(--line2)}
-.btn.ghost:hover{background:var(--base3);border-color:#33333a}
-.btn.dark{background-color:var(--base2);border-color:var(--line2)}
-.btn.dark:hover{background-color:var(--base3)}
-/* ================= KARTLAR ================= */
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:start}
-@media (max-width:1100px){.grid{grid-template-columns:repeat(2,1fr)}}
-@media (max-width:700px){.grid{grid-template-columns:1fr}}
-.grid .full{grid-column:1/-1}
-.grid .wide{grid-column:span 2}
-@media (max-width:700px){.grid .wide{grid-column:1/-1}}
-.card{
-  background:var(--base2);
-  border:var(--border) solid var(--line);
-  border-radius:var(--radius-box);
-  padding:16px 18px;
-  width:100%;
+
+.nav-item.active {
+  background: var(--bg-panel);
+  color: var(--primary);
+  font-weight: 600;
 }
-.card h3{
-  font-size:11px;
-  text-transform:uppercase;
-  letter-spacing:1.5px;
-  color:var(--dim);
-  margin-bottom:12px;
-  display:flex;align-items:center;gap:10px;
-  font-weight:700;
+
+.sidebar-footer {
+  padding: 20px 16px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
-.card h3::after{content:"";flex:1;height:1px;background:var(--line)}
-.card h3 b{color:var(--txt)}
-/* ================= ÖĞELER ================= */
-pre{
-  background:var(--base);
-  border:var(--border) solid var(--line);
-  border-radius:var(--radius-field);
-  padding:10px 12px;
-  font-size:12px;
-  max-height:240px;overflow:auto;
-  white-space:pre-wrap;word-break:break-word;
-  color:#aaabb0;line-height:1.55;
+
+#userchip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-title);
 }
-.kv{display:flex;justify-content:space-between;align-items:center;padding:7px 2px;border-bottom:1px dashed var(--line);font-size:13px}
-.kv:last-child{border-bottom:none}
-.kv b{color:var(--txt);font-weight:600}
-.kv span{color:var(--muted)}
-.muted{color:var(--muted)}
-.no2{color:var(--dim)}
-.chips{display:flex;gap:5px;flex-wrap:wrap}
-.chip{
-  background:var(--base3);
-  border:var(--border) solid var(--line2);
-  border-radius:var(--radius-selector);
-  padding:3px 9px;
-  font-size:11.5px;
-  color:var(--muted);
-  cursor:pointer;user-select:none;
-  transition:background-color .15s,color .15s,border-color .15s;
-  font-family:inherit;
+
+#userchip img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-panel);
+  object-fit: cover;
 }
-.chip:hover{background:#222228;color:var(--txt);border-color:#33333a}
-.chip.sel{background:var(--txt);color:var(--base);border-color:var(--txt)}
-.badge{display:inline-block;padding:3px 10px;border-radius:var(--radius-selector);font-size:10.5px;font-weight:700;letter-spacing:.4px}
-.badge.on{background:var(--base3);color:var(--txt);border:var(--border) solid var(--line2)}
-.badge.off{background:transparent;color:var(--dim);border:var(--border) solid var(--line)}
-.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-/* ================= GİRİŞ EKRANI ================= */
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.9);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;z-index:99}
-.overlay .box{
-  width:400px;max-width:92%;
-  background:var(--base2);
-  border:var(--border) solid var(--line2);
-  border-radius:var(--radius-box);
-  padding:30px;
-  text-align:center;
+
+#userchip span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.overlay .box h2{margin-bottom:8px;font-size:18px;color:var(--txt)}
-.overlay .box p{color:var(--muted);font-size:13.5px;line-height:1.6;margin-bottom:20px}
-.overlay .box .btn{width:100%}
-.hint{font-size:12px;color:var(--dim);margin-top:14px;line-height:1.55}
-/* ================= TOGGLE SATIRI ================= */
-label.toggle-row{position:relative;display:flex;align-items:center;gap:9px;font-size:13px;color:var(--txt);margin:8px 0;padding-left:30px;font-weight:600;cursor:pointer;min-height:20px}
-label.toggle-row input[type=checkbox]{position:absolute;opacity:0;width:0;height:0}
-label.toggle-row::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);width:18px;height:18px;flex:none;background:var(--base3);border:1px solid var(--line2);border-radius:6px;transition:background-color .15s,border-color .15s}
-label.toggle-row:hover::before{border-color:#33333a}
-label.toggle-row::after{content:"";position:absolute;left:6px;top:50%;transform:translateY(-62%) rotate(45deg);width:5px;height:9px;flex:none;border-right:2px solid var(--base);border-bottom:2px solid var(--base);opacity:0;transition:opacity .15s}
-label.toggle-row:has(input:focus-visible){outline:2px solid var(--acc);outline-offset:2px;border-radius:6px}
-label.toggle-row:has(input:checked)::before{background:var(--acc);border-color:var(--acc)}
-label.toggle-row:has(input:checked)::after{opacity:1}
-/* ================= BANNER / TOAST ================= */
-.banner{
-  display:flex;align-items:center;gap:10px;
-  background:var(--base2);
-  border:var(--border) solid var(--line2);
-  border-radius:var(--radius-field);
-  padding:10px 14px;font-size:12.5px;
-  margin-bottom:16px;color:var(--txt);
+
+#userchip a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 14px;
+  transition: color 0.2s;
 }
-.banner b{color:var(--txt)}
-.toast{
-  position:fixed;bottom:26px;right:26px;
-  background:var(--base2);
-  border:var(--border) solid var(--line2);
-  border-radius:var(--radius-field);
-  padding:14px 20px;font-size:13.5px;
-  box-shadow:0 12px 40px rgba(0,0,0,.7);
-  z-index:100;
-  opacity:0;margin-bottom:-14px;
-  transition:opacity .25s,margin .25s;
-  max-width:430px;color:var(--txt);
-  border-left:2px solid var(--acc);
+
+#userchip a:hover {
+  color: var(--danger);
 }
-.toast.show{opacity:1;margin-bottom:0}
-/* ================= SAYFA GEÇİŞİ ================= */
-section{display:none}
-section.active{display:block;animation:fade .2s ease}
-@keyframes fade{from{opacity:0}to{opacity:1}}
-.link{color:var(--muted);text-decoration:none;font-size:12px;font-weight:600}
-.link:hover{color:var(--txt);text-decoration:underline}
-::-webkit-scrollbar{width:10px;height:10px}
-::-webkit-scrollbar-track{background:var(--base)}
-::-webkit-scrollbar-thumb{background:var(--line2);border-radius:5px;border:2px solid var(--base)}
-::-webkit-scrollbar-thumb:hover{background:#3a3a40}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.status-indicator.on .status-dot { background: var(--success); }
+.status-indicator.off .status-dot { background: var(--danger); }
+
+/* ================= MAIN CONTENT ================= */
+.content {
+  flex: 1;
+  padding: 40px;
+  max-width: 1400px; /* Tablo düzeni için genişletildi */
+  margin: 0 auto;
+  width: 100%;
+}
+
+.header {
+  margin-bottom: 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.header-titles h1 {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  margin-bottom: 8px;
+}
+
+.header-titles p {
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+/* ================= PANELS (Table Grid Style) ================= */
+.settings-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* Kesin 2 sütun (Tablo gibi) */
+  gap: 1px; /* 1px boşluk, tablo çizgileri (border) işlevi görecek */
+  background: var(--border-color); /* Tablo çizgi rengi */
+  border: 1px solid var(--border-color); /* Dış tablo çerçevesi */
+  border-radius: var(--radius-lg);
+  overflow: hidden; /* Köşeleri yuvarlamak için */
+}
+
+@media (max-width: 1100px) {
+  .settings-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  background: var(--bg-panel);
+  border-radius: 0; /* Tablo hücresi olduğu için iç köşeler düz */
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-header {
+  padding: 20px 20px 10px;
+}
+
+.panel-header h2 {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  margin-bottom: 4px;
+}
+
+.panel-header p {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.panel-footer {
+  margin-top: auto; /* Tablo hücreleri (paneller) aynı boyutta olursa butonu hep en alta iter */
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-color);
+  background: transparent;
+}
+
+/* ================= SETTING ROWS (Strict Alignment) ================= */
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-color);
+  gap: 24px;
+}
+.setting-row:last-child {
+  border-bottom: none;
+}
+
+.setting-row.vertical {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.setting-info {
+  flex: 1; /* Pushes control to the right */
+}
+
+.setting-info label {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+
+.setting-info span {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Her bir input/buton grubu aynı genişliği kaplayacak ve mükemmel hizalanacak */
+.setting-control {
+  width: 280px; 
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.setting-control.col {
+  flex-direction: column;
+  gap: 10px;
+}
+
+.setting-control.row {
+  flex-direction: row;
+  gap: 8px;
+}
+
+.setting-control.toggle {
+  justify-content: flex-end; /* Toggle butonlarını sağa yapıştır */
+}
+
+.setting-control.full {
+  width: 100%; /* Vertical satırlarda tam genişlik */
+}
+
+/* ================= FORMS & INPUTS ================= */
+.select-modern,
+input[type=text],
+input[type=password],
+textarea {
+  flex: 1;
+  width: 100%;
+  background: var(--bg-input);
+  border: none;
+  color: var(--text-main);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+/* iOS'te input focus olduğunda kenarlık çıkmaz, sadece yazarız */
+.select-modern:focus,
+input[type=text]:focus,
+textarea:focus {
+  background: #3A3A3C;
+}
+
+textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+/* ================= BUTTONS ================= */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  border: none;
+}
+
+.btn:active {
+  opacity: 0.7; /* iOS tıklama hissi */
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: #FFF;
+}
+
+.btn-secondary {
+  background: var(--bg-input);
+  color: var(--primary);
+}
+
+.btn-danger {
+  background: rgba(255, 69, 58, 0.15);
+  color: var(--danger);
+}
+
+.btn-discord {
+  background: #5865F2;
+  color: #FFF;
+  width: 100%;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ================= TOGGLES (Birebir iOS Stili) ================= */
+.toggle-control {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.toggle-control input { display: none; }
+
+.control-indicator {
+  width: 51px;
+  height: 31px;
+  background: #39393D;
+  border-radius: 31px;
+  position: relative;
+  transition: background 0.3s ease;
+}
+
+.control-indicator::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  background: #FFFFFF;
+  border-radius: 50%;
+  transition: transform 0.3s cubic-bezier(0.3, 1.5, 0.6, 1);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.15), 0 1px 1px rgba(0,0,0,0.16), 0 3px 1px rgba(0,0,0,0.1);
+}
+
+.toggle-control input:checked ~ .control-indicator { 
+  background: var(--success); 
+}
+
+.toggle-control input:checked ~ .control-indicator::after {
+  transform: translateX(20px);
+}
+
+/* ================= CONSOLE & MISC ================= */
+.console-box {
+  margin-top: 16px;
+  background: var(--bg-main);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+}
+
+.console-box pre {
+  font-family: "SF Mono", Consolas, monospace;
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+
+.variables code {
+  background: var(--bg-input);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-family: "SF Mono", Consolas, monospace;
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-right: 4px;
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+/* ================= MODALS & TOAST ================= */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px); /* iOS arka plan bulanıklığı */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: rgba(28, 28, 30, 0.85); /* Hafif saydam iOS kartı */
+  backdrop-filter: blur(20px);
+  border-radius: var(--radius-lg);
+  padding: 30px;
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal h2 {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.modal p {
+  color: var(--text-muted);
+  margin-bottom: 24px;
+  font-size: 15px;
+}
+
+.toast {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translate(-50%, 100px);
+  background: rgba(44, 44, 46, 0.9);
+  backdrop-filter: blur(10px);
+  color: #FFF;
+  padding: 16px 24px;
+  border-radius: 30px; /* iOS hap tasarımı */
+  font-size: 15px;
+  font-weight: 500;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  opacity: 0;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 200;
+}
+
+.toast.show {
+  transform: translate(-50%, 0);
+  opacity: 1;
+}
+
+/* ================= JS CLASSES ================= */
+section { display: none; }
+section.active { display: block; animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { 
+  from { opacity: 0; } 
+  to { opacity: 1; } 
+}

@@ -115,6 +115,10 @@ const loadEvents = () => {
   // Kayıt paneli etkileşimleri (buton / rol-ekseni seçici / modal)
   require('./utils/registerPanelHandler')(client);
   console.log(`[PANEL] Kayıt paneli etkileşimleri yüklendi.`);
+
+  // Müzik buton etkileşimleri
+  require('./utils/music/musicButtonHandler')(client);
+  console.log(`[MUSIC] Müzik buton etkileşimleri yüklendi.`);
 };
 
 loadEvents();
