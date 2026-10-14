@@ -93,7 +93,6 @@ class MusicManager {
   }
 
   getCookiePath() {
-    // Proje dizininde veya root'ta cookies.txt varsa kullan
     const possiblePaths = [
       path.join(__dirname, '../../cookies.txt'),
       path.join(__dirname, '../cookies.txt'),
@@ -128,7 +127,7 @@ class MusicManager {
       try {
         const res = await axios.get(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`, { timeout: 5000 });
         if (res.data && res.data.title) {
-          return `${res.data.title} ${res.data.author_name || ''}`.trim();
+          return res.data.title;
         }
       } catch (_) {}
     }
@@ -136,41 +135,74 @@ class MusicManager {
     return null;
   }
 
+  // Başlıktan gürültüleri (emojiler, 7/24, canlı yayın, parantezler) temizleyip arama terimleri çıkarır
+  extractSearchQueries(rawTitle) {
+    if (!rawTitle) return [];
+    
+    // Emojileri ve özel sembolleri temizle
+    let clean = rawTitle.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}🔴🔥🎵✨⭐📢]/gu, ' ');
+    // Gürültü kelimeleri temizle
+    clean = clean.replace(/\b(canlı yayın|canli yayin|live stream|live|7\/24|official|video|music video|audio|lyrics)\b/gi, ' ');
+    
+    const parts = clean.split(/[|\-–]/).map(p => p.trim()).filter(p => p.length >= 3);
+    const queries = [];
+    if (parts.length > 0) {
+      queries.push(parts[0]);
+    }
+    if (parts.length > 1) {
+      queries.push(parts[1]);
+    }
+    queries.push(clean.trim());
+
+    // Tekrarlardan arındır
+    return [...new Set(queries.filter(q => q && q.length > 2))];
+  }
+
   // Akıllı Arama & Çözme (SoundCloud + YouTube + Fallback)
   async searchOrResolve(query) {
     await this.initPromise;
 
     const isUrl = /^https?:\/\//i.test(query.trim());
-    let target = query.trim();
+    const target = query.trim();
 
-    // Link ise ve YouTube veya Spotify ise meta verisini çıkarıp gerekirse fallback yapacağız
-    const linkMeta = isUrl ? await this.resolveLinkMetadata(target) : null;
+    // Link ise başlık meta verisini al
+    const linkTitle = isUrl ? await this.resolveLinkMetadata(target) : null;
 
-    // Arama hedefi: Link değilse varsayılan olarak SoundCloud aratılır (Datacenter IP engeli YOKTUR)
-    // Eğer bir link ise doğrudan o link çözülmeye çalışılır
-    const primaryTarget = isUrl ? target : `scsearch1:${target}`;
+    // 1. Durum: Doğrudan URL girilmişse önce o linki dene
+    if (isUrl) {
+      try {
+        return await this.fetchMetadata(target);
+      } catch (err) {
+        console.log(`[MUSIC] Link koruması aşılamadı (${err.message}). Başlık çözümleniyor...`);
 
-    try {
-      return await this.fetchMetadata(primaryTarget);
-    } catch (primaryErr) {
-      // Eğer YouTube linki bot doğrulamasına (Sign in) takıldıysa ve video adı biliniyorsa SoundCloud'dan bul ve çal!
-      if (linkMeta) {
-        console.log(`[MUSIC] Link koruması aşılamadı, parça adına göre SoundCloud üzerinden aranıyor: "${linkMeta}"`);
-        try {
-          return await this.fetchMetadata(`scsearch1:${linkMeta}`);
-        } catch (secondaryErr) {
-          throw new Error(`Parça bulunamadı. (${primaryErr.message})`);
+        if (linkTitle) {
+          const searchCandidates = this.extractSearchQueries(linkTitle);
+          console.log('[MUSIC] Arama adayları:', searchCandidates);
+
+          for (const cand of searchCandidates) {
+            try {
+              console.log(`[MUSIC] SoundCloud üzerinden deneniyor: "${cand}"`);
+              const res = await this.fetchMetadata(`scsearch1:${cand}`);
+              if (res) return res;
+            } catch (_) {}
+          }
         }
-      }
 
-      // Eğer SoundCloud'da bulunamadıysa YouTube aramasını dene
-      if (!isUrl) {
-        try {
-          return await this.fetchMetadata(`ytsearch1:${target}`);
-        } catch (_) {}
+        throw new Error('Parça YouTube bot korumasına takıldı ve SoundCloud eşleşmesi bulunamadı. Lütfen şarkı adını doğrudan yazarak arayın.');
       }
+    }
 
-      throw primaryErr;
+    // 2. Durum: Şarkı adı yazılmışsa (Örn: "tarkan yolla", "duman")
+    // SoundCloud'da ara (Datacenter IP engeli kesinlikle YOKTUR)
+    try {
+      return await this.fetchMetadata(`scsearch1:${target}`);
+    } catch (scErr) {
+      console.log(`[MUSIC] SoundCloud'da bulunamadı, YouTube araması deneniyor...`);
+      try {
+        return await this.fetchMetadata(`ytsearch1:${target}`);
+      } catch (ytErr) {
+        throw new Error(`Şarkı bulunamadı: ${scErr.message}`);
+      }
     }
   }
 
