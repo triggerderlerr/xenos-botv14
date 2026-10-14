@@ -6,19 +6,75 @@ const {
   VoiceConnectionStatus, 
   StreamType 
 } = require('@discordjs/voice');
-const { spawn, execFile } = require('child_process');
+const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const ffmpegStatic = require('ffmpeg-static');
+const YTDlpWrap = require('yt-dlp-wrap').default;
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-
-// Standalone yt-dlp, deno ve ffmpeg yolları
-const YTDLP_PATH = path.join(process.env.LOCALAPPDATA, 'Microsoft\\WinGet\\Packages\\yt-dlp.yt-dlp_Microsoft.Winget.Source_8wekyb3d8bbwe\\yt-dlp.exe');
-const DENO_PATH = path.join(process.env.LOCALAPPDATA, 'Microsoft\\WinGet\\Packages\\DenoLand.Deno_Microsoft.Winget.Source_8wekyb3d8bbwe\\deno.exe');
-const FFMPEG_PATH = path.join(process.env.LOCALAPPDATA, 'Microsoft\\WinGet\\Packages\\yt-dlp.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-N-126374-g089a48eb36-win64-gpl\\bin\\ffmpeg.exe');
 
 class MusicManager {
   constructor() {
     this.queues = new Map();
+    this.binaryPath = this.resolveYtDlpBinary();
+    this.initPromise = this.ensureYtDlpBinary();
+  }
+
+  // İşletim sistemine uygun binary yolunu belirler (Windows & Linux / Render.com uyumlu)
+  resolveYtDlpBinary() {
+    const isWin = process.platform === 'win32';
+    const localBinDir = path.join(__dirname, '../../bin');
+    if (!fs.existsSync(localBinDir)) {
+      try { fs.mkdirSync(localBinDir, { recursive: true }); } catch (_) {}
+    }
+
+    const localBin = path.join(localBinDir, isWin ? 'yt-dlp.exe' : 'yt-dlp');
+    if (fs.existsSync(localBin)) {
+      return localBin;
+    }
+
+    // Windows WinGet yolu varsa kontrol et
+    if (isWin && process.env.LOCALAPPDATA) {
+      const wingetPath = path.join(process.env.LOCALAPPDATA, 'Microsoft\\WinGet\\Packages\\yt-dlp.yt-dlp_Microsoft.Winget.Source_8wekyb3d8bbwe\\yt-dlp.exe');
+      if (fs.existsSync(wingetPath)) {
+        return wingetPath;
+      }
+    }
+
+    return localBin;
+  }
+
+  // Binary yoksa (özellikle Render.com gibi sunucularda) GitHub'dan otomatik indirir
+  async ensureYtDlpBinary() {
+    if (fs.existsSync(this.binaryPath)) {
+      return this.binaryPath;
+    }
+
+    console.log(`[MUSIC] yt-dlp binary bulunamadı, platforma (${process.platform}) uygun sürüm indiriliyor: ${this.binaryPath}`);
+    try {
+      await YTDlpWrap.downloadFromGithub(this.binaryPath);
+      if (process.platform !== 'win32') {
+        fs.chmodSync(this.binaryPath, 0o755);
+      }
+      console.log('[MUSIC] yt-dlp başarıyla indirildi ve hazırlandı.');
+      return this.binaryPath;
+    } catch (err) {
+      console.error('[MUSIC] yt-dlp indirilirken hata:', err.message);
+      // Sistemde kurulu yt-dlp komutunu dene
+      return 'yt-dlp';
+    }
+  }
+
+  getDenoPath() {
+    if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
+      const winDeno = path.join(process.env.LOCALAPPDATA, 'Microsoft\\WinGet\\Packages\\DenoLand.Deno_Microsoft.Winget.Source_8wekyb3d8bbwe\\deno.exe');
+      if (fs.existsSync(winDeno)) return winDeno;
+    }
+    return null;
+  }
+
+  getFfmpegPath() {
+    return ffmpegStatic || 'ffmpeg';
   }
 
   getQueue(guildId) {
@@ -27,6 +83,8 @@ class MusicManager {
 
   // yt-dlp ile arama veya link çözme (Token gerektirmez!)
   async searchOrResolve(query) {
+    await this.initPromise;
+
     return new Promise((resolve, reject) => {
       const isUrl = /^https?:\/\//i.test(query);
       const searchTarget = isUrl ? query : `ytsearch1:${query}`;
@@ -40,11 +98,12 @@ class MusicManager {
         '--skip-download'
       ];
 
-      if (fs.existsSync(DENO_PATH)) {
-        args.push('--js-runtimes', `deno:${DENO_PATH}`);
+      const deno = this.getDenoPath();
+      if (deno) {
+        args.push('--js-runtimes', `deno:${deno}`);
       }
 
-      const proc = spawn(fs.existsSync(YTDLP_PATH) ? YTDLP_PATH : 'yt-dlp', args);
+      const proc = spawn(this.binaryPath, args);
       let stdout = '';
       let stderr = '';
 
@@ -77,8 +136,10 @@ class MusicManager {
     });
   }
 
-  // Doğrudan oynatılabilir ses URL'sini al (Normal videolar + Canlı Yayın / HLS Radyo uyumlu)
+  // Doğrudan ses URL'sini al (Normal videolar + Canlı Yayın / HLS Radyo uyumlu)
   async getDirectAudioUrl(targetUrl) {
+    await this.initPromise;
+
     return new Promise((resolve, reject) => {
       const args = [
         targetUrl,
@@ -87,11 +148,12 @@ class MusicManager {
         '--no-warnings'
       ];
 
-      if (fs.existsSync(DENO_PATH)) {
-        args.push('--js-runtimes', `deno:${DENO_PATH}`);
+      const deno = this.getDenoPath();
+      if (deno) {
+        args.push('--js-runtimes', `deno:${deno}`);
       }
 
-      const proc = spawn(fs.existsSync(YTDLP_PATH) ? YTDLP_PATH : 'yt-dlp', args);
+      const proc = spawn(this.binaryPath, args);
       let stdout = '';
       let stderr = '';
 
@@ -110,8 +172,7 @@ class MusicManager {
 
   // FFmpeg ile doğrudan decode edilmiş canlı PCM stream üretimi
   createStreamFromUrl(directAudioUrl) {
-    const ffmpegBinary = fs.existsSync(FFMPEG_PATH) ? FFMPEG_PATH : 'ffmpeg';
-    const ffmpegProc = spawn(ffmpegBinary, [
+    const ffmpegProc = spawn(this.getFfmpegPath(), [
       '-reconnect', '1',
       '-reconnect_streamed', '1',
       '-reconnect_delay_max', '5',
@@ -263,7 +324,7 @@ class MusicManager {
         )
         .setThumbnail(song.thumbnail)
         .setTimestamp()
-        .setFooter({ text: 'Xenos Müzik', iconURL: guild.iconURL() || undefined });
+        .setFooter({ text: 'Xenos Müzik', iconURL: guildId ? (queue.voiceChannel?.guild?.iconURL() || undefined) : undefined });
 
       const row = this.getControlRow(queue);
 
