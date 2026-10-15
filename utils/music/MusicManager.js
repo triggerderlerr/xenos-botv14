@@ -188,15 +188,23 @@ class MusicManager {
   // Başlıktan gürültüleri ayıklar
   extractSearchQueries(rawTitle) {
     if (!rawTitle) return [];
-    
+
     let clean = rawTitle.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}🔴🔥🎵✨⭐📢]/gu, ' ');
-    clean = clean.replace(/\b(canlı yayın|canli yayin|live stream|live|7\/24|official|video|music video|audio|lyrics)\b/gi, ' ');
-    
-    const parts = clean.split(/[|\-–]/).map(p => p.trim()).filter(p => p.length >= 3);
+    // Parantez / köşeli parantez içeriklerini at: (Official Music Video), [4K] vb.
+    clean = clean.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ');
+    // Kanal sonekleri: "50CentVEVO", "Artist - Topic"
+    clean = clean.replace(/\b\w*VEVO\b/gi, ' ').replace(/\s-\sTopic\b/gi, ' ');
+    clean = clean.replace(/\b(canlı yayın|canli yayin|live stream|live|7\/24|official|music video|video|audio|lyrics|lyric|hd|hq|4k)\b/gi, ' ');
+    clean = clean.replace(/\s+/g, ' ').trim();
+
+    const parts = clean.split(/\s[|\-–]\s|[|–]/).map(p => p.trim()).filter(p => p.length >= 2);
     const queries = [];
-    if (parts.length > 0) queries.push(parts[0]);
-    if (parts.length > 1) queries.push(parts[1]);
-    queries.push(clean.trim());
+
+    // En iyi aday: "Sanatçı Şarkı" (ayraçsız birleşik)
+    if (parts.length >= 2) queries.push(`${parts[0]} ${parts[1]}`);
+    queries.push(clean.replace(/[|\-–]/g, ' ').replace(/\s+/g, ' ').trim());
+    if (parts.length >= 2) queries.push(parts[1]);
+    if (parts.length >= 1) queries.push(parts[0]);
 
     return [...new Set(queries.filter(q => q && q.length > 2))];
   }
@@ -280,8 +288,9 @@ class MusicManager {
         try {
           const data = JSON.parse(stdout);
 
-          // Playlist Tespiti:
-          if ((forcePlaylist || data._type === 'playlist') && data.entries && data.entries.length > 0) {
+          // Playlist Tespiti: arama sorguları (scsearch/ytsearch) da 'playlist' tipinde döner, bunlar playlist SAYILMAZ
+          const isSearchQuery = /^(scsearch|ytsearch)\d*:/i.test(target);
+          if (!isSearchQuery && (forcePlaylist || data._type === 'playlist') && data.entries && data.entries.length > 0) {
             const playlistSongs = data.entries
               .filter(e => e && (e.title || e.url || e.id))
               .map(entry => ({
@@ -670,7 +679,11 @@ class MusicManager {
 
     } catch (error) {
       console.error('[ExecutePlay Error]', error);
-      queue.textChannel.send(`❌ Şarkı çalınırken hata oluştu: ${error.message}`).catch(() => {});
+      const isBotBlock = /sign in|not a bot|cookies/i.test(error.message || '');
+      const friendly = isBotBlock
+        ? '❌ Bu parça YouTube tarafından sunucuya kapatıldı ve alternatif bir kaynak bulunamadı. Şarkıyı **ismiyle** yazarak aramayı dene.'
+        : `❌ Şarkı çalınırken hata oluştu: ${String(error.message).slice(0, 200)}`;
+      queue.textChannel.send(friendly).catch(() => {});
       queue.songs.shift();
       if (queue.songs.length > 0) {
         this.executePlay(guildId, queue.songs[0]);
