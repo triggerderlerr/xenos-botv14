@@ -92,14 +92,64 @@ class MusicManager {
     }
   }
 
+  // Çerez kaynağı önceliği: YT_COOKIES / YT_COOKIES_B64 ortam değişkeni (Render Environment) → cookies.txt dosyası
   getCookiePath() {
+    if (this._cookieFileCache !== undefined) return this._cookieFileCache;
+
+    let raw = process.env.YT_COOKIES || '';
+    if (!raw && process.env.YT_COOKIES_B64) {
+      try { raw = Buffer.from(process.env.YT_COOKIES_B64, 'base64').toString('utf8'); } catch (_) {}
+    }
+
+    if (raw && raw.trim()) {
+      try {
+        // Render'da ortam değişkenleri satır sonlarını "\n" metni olarak taşıyabilir
+        raw = raw.replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
+        if (!/^# (Netscape )?HTTP Cookie File/m.test(raw)) {
+          raw = '# Netscape HTTP Cookie File\n' + raw;
+        }
+        const tmpFile = path.join(require('os').tmpdir(), 'xenos-yt-cookies.txt');
+        fs.writeFileSync(tmpFile, raw, { mode: 0o600 });
+        console.log('[MUSIC] YouTube çerezleri ortam değişkeninden yüklendi.');
+        this._cookieFileCache = tmpFile;
+        return tmpFile;
+      } catch (e) {
+        console.error('[MUSIC] Çerez dosyası yazılamadı:', e.message);
+      }
+    }
+
     const possiblePaths = [
       path.join(__dirname, '../../cookies.txt'),
       path.join(__dirname, '../cookies.txt'),
       path.join(process.cwd(), 'cookies.txt')
     ];
     for (const p of possiblePaths) {
-      if (fs.existsSync(p)) return p;
+      if (fs.existsSync(p)) {
+        this._cookieFileCache = p;
+        return p;
+      }
+    }
+    this._cookieFileCache = null;
+    return null;
+  }
+
+  // Tüm yt-dlp çağrılarında ortak argümanlar (çerez + isteğe bağlı proxy)
+  getCommonArgs() {
+    const args = [];
+    const cookieFile = this.getCookiePath();
+    if (cookieFile) args.push('--cookies', cookieFile);
+    if (process.env.YTDLP_PROXY) args.push('--proxy', process.env.YTDLP_PROXY);
+    return args;
+  }
+
+  // YouTube engellenirse aynı parçayı SoundCloud'da bulur
+  async findSoundCloudAlternative(title) {
+    const candidates = this.extractSearchQueries(title);
+    for (const cand of candidates) {
+      try {
+        const res = await this.fetchMetadata(`scsearch1:${cand}`, false);
+        if (res && !res.isPlaylist && res.url) return res;
+      } catch (_) {}
     }
     return null;
   }
@@ -213,10 +263,7 @@ class MusicManager {
         '--skip-download'
       ];
 
-      const cookieFile = this.getCookiePath();
-      if (cookieFile) {
-        args.push('--cookies', cookieFile);
-      }
+      args.push(...this.getCommonArgs());
 
       const proc = spawn(this.binaryPath, args);
       let stdout = '';
@@ -289,10 +336,7 @@ class MusicManager {
         '--no-warnings'
       ];
 
-      const cookieFile = this.getCookiePath();
-      if (cookieFile) {
-        args.push('--cookies', cookieFile);
-      }
+      args.push(...this.getCommonArgs());
 
       const proc = spawn(this.binaryPath, args);
       let stdout = '';
@@ -312,16 +356,26 @@ class MusicManager {
   }
 
   createStreamFromUrl(directAudioUrl) {
-    const ffmpegProc = spawn(this.getFfmpegPath(), [
+    const ffArgs = [
       '-reconnect', '1',
       '-reconnect_streamed', '1',
-      '-reconnect_delay_max', '5',
+      '-reconnect_delay_max', '5'
+    ];
+
+    // googlevideo akış linkleri yt-dlp'nin çıktığı IP'ye bağlıdır; proxy kullanılıyorsa FFmpeg de aynı proxy'den geçmeli
+    if (process.env.YTDLP_PROXY && /googlevideo\.com/i.test(directAudioUrl)) {
+      ffArgs.push('-http_proxy', process.env.YTDLP_PROXY);
+    }
+
+    ffArgs.push(
       '-i', directAudioUrl,
       '-f', 's16le',
       '-ar', '48000',
       '-ac', '2',
       'pipe:1'
-    ], {
+    );
+
+    const ffmpegProc = spawn(this.getFfmpegPath(), ffArgs, {
       stdio: ['ignore', 'pipe', 'ignore']
     });
 
@@ -569,7 +623,23 @@ class MusicManager {
     if (!queue || !song) return;
 
     try {
-      const directAudioUrl = await this.getDirectAudioUrl(song.url);
+      let directAudioUrl;
+      try {
+        directAudioUrl = await this.getDirectAudioUrl(song.url);
+      } catch (streamErr) {
+        // YouTube veri merkezi engeli (bot kontrolü) ise aynı parçayı SoundCloud'dan bulup çal
+        if (/sign in|not a bot|cookies|429|403/i.test(streamErr.message) && /youtube\.com|youtu\.be/i.test(song.url)) {
+          console.log(`[MUSIC] YouTube akışı engellendi, SoundCloud yedeği deneniyor: "${song.title}"`);
+          const alt = await this.findSoundCloudAlternative(song.title);
+          if (!alt) throw streamErr;
+          song.url = alt.url;
+          song.uploader = alt.uploader || song.uploader;
+          song.thumbnail = alt.thumbnail || song.thumbnail;
+          directAudioUrl = await this.getDirectAudioUrl(alt.url);
+        } else {
+          throw streamErr;
+        }
+      }
       const stream = this.createStreamFromUrl(directAudioUrl);
 
       const resource = createAudioResource(stream, {
