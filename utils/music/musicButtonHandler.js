@@ -31,16 +31,31 @@ module.exports = (client) => {
       });
     }
 
+    // Kuyrukta çalan şarkı kalmadıysa (şarkı hata verip atılmış olabilir) paneli güvenli şekilde kapat
+    if (!queue.songs || queue.songs.length === 0) {
+      const endedEmbed = new EmbedBuilder()
+        .setColor('#FF9900')
+        .setDescription('🎵 | Kuyrukta çalan şarkı kalmadı. Yeni bir şarkı için `/play` kullanın.');
+      return interaction.update({ embeds: [endedEmbed], components: [] }).catch(() => {});
+    }
+
+    // Aktif görünüme göre doğru embed'i güvenle üretir (asla null göndermez)
+    const buildView = (showQueue) => {
+      const embed = showQueue
+        ? musicManager.getQueueEmbed(guild.id)
+        : musicManager.getNowPlayingEmbed(guild.id);
+      if (!embed) return null;
+      return { embeds: [embed], components: [musicManager.getControlRow(queue, showQueue)] };
+    };
+
     try {
       switch (customId) {
         // Duraklat / Devam Et: Yeni mesaj ATMAZ, aynı mesajı yerinde günceller!
         case 'music_toggle_pause': {
           musicManager.togglePause(guild.id);
-          const embed = queue.isShowingQueue 
-            ? musicManager.getQueueEmbed(guild.id) 
-            : musicManager.getNowPlayingEmbed(guild.id);
-          const row = musicManager.getControlRow(queue, queue.isShowingQueue);
-          await interaction.update({ embeds: [embed], components: [row] });
+          const view = buildView(queue.isShowingQueue);
+          if (!view) return interaction.deferUpdate();
+          await interaction.update(view);
           break;
         }
 
@@ -64,35 +79,27 @@ module.exports = (client) => {
         // Döngü: Yeni mesaj ATMAZ, butonu ve footer bilgisini yerinde günceller!
         case 'music_loop': {
           musicManager.toggleLoop(guild.id);
-          const embed = queue.isShowingQueue 
-            ? musicManager.getQueueEmbed(guild.id) 
-            : musicManager.getNowPlayingEmbed(guild.id);
-          const row = musicManager.getControlRow(queue, queue.isShowingQueue);
-          await interaction.update({ embeds: [embed], components: [row] });
+          const view = buildView(queue.isShowingQueue);
+          if (!view) return interaction.deferUpdate();
+          await interaction.update(view);
           break;
         }
 
-        // Sıra Butonu: Alt alta mesaj atmak yerine AYNI MESAJI Şarkı Kuyruğu ekranına dönüştürür!
+        // Sıra Butonu: AYNI MESAJI Şarkı Kuyruğu ekranına dönüştürür!
         case 'music_queue': {
           queue.isShowingQueue = true;
-          const queueEmbed = musicManager.getQueueEmbed(guild.id);
-          const row = musicManager.getControlRow(queue, true);
-          await interaction.update({
-            embeds: [queueEmbed],
-            components: [row]
-          });
+          const view = buildView(true);
+          if (!view) return interaction.deferUpdate();
+          await interaction.update(view);
           break;
         }
 
         // Geri Dön Butonu: Sıra ekranından tekrar Şimdi Çalıyor ekranına döner!
         case 'music_back_nowplaying': {
           queue.isShowingQueue = false;
-          const nowPlayingEmbed = musicManager.getNowPlayingEmbed(guild.id);
-          const row = musicManager.getControlRow(queue, false);
-          await interaction.update({
-            embeds: [nowPlayingEmbed],
-            components: [row]
-          });
+          const view = buildView(false);
+          if (!view) return interaction.deferUpdate();
+          await interaction.update(view);
           break;
         }
 
@@ -105,7 +112,7 @@ module.exports = (client) => {
         await interaction.reply({
           content: '❌ | Buton işlemi sırasında bir hata oluştu.',
           ephemeral: true
-        });
+        }).catch(() => {});
       }
     }
   });

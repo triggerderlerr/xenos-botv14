@@ -687,6 +687,17 @@ class MusicManager {
       queue.songs.shift();
       if (queue.songs.length > 0) {
         this.executePlay(guildId, queue.songs[0]);
+      } else {
+        if (queue.nowPlayingMsg) {
+          queue.nowPlayingMsg.edit({ components: [] }).catch(() => {});
+        }
+        setTimeout(() => {
+          const currentQueue = this.queues.get(guildId);
+          if (currentQueue && currentQueue.songs.length === 0) {
+            if (currentQueue.connection) currentQueue.connection.destroy();
+            this.queues.delete(guildId);
+          }
+        }, 15000);
       }
     }
   }
