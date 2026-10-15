@@ -33,82 +33,65 @@ module.exports = (client) => {
 
     try {
       switch (customId) {
+        // Duraklat / Devam Et: Yeni mesaj ATMAZ, aynı mesajı yerinde günceller!
         case 'music_toggle_pause': {
-          const isPaused = musicManager.togglePause(guild.id);
-          const row = musicManager.getControlRow(queue);
-          await interaction.update({ components: [row] });
-          await interaction.followUp({
-            content: isPaused ? '⏸️ | Müzik duraklatıldı.' : '▶️ | Müzik devam ettiriliyor.',
-            ephemeral: true
-          });
+          musicManager.togglePause(guild.id);
+          const embed = queue.isShowingQueue 
+            ? musicManager.getQueueEmbed(guild.id) 
+            : musicManager.getNowPlayingEmbed(guild.id);
+          const row = musicManager.getControlRow(queue, queue.isShowingQueue);
+          await interaction.update({ embeds: [embed], components: [row] });
           break;
         }
 
+        // Şarkıyı Geç: Sessizce sıradaki şarkıya geçer ve aynı mesaj güncellenir!
         case 'music_skip': {
+          await interaction.deferUpdate();
           musicManager.skip(guild.id);
-          await interaction.reply({
-            content: '⏭️ | Şarkı başarıyla geçildi.',
-            ephemeral: true
-          });
           break;
         }
 
+        // Durdur: Mesajı durduruldu durumuna getirir ve butonları kaldırır!
         case 'music_stop': {
           musicManager.stop(guild.id);
-          if (queue.nowPlayingMsg) {
-            queue.nowPlayingMsg.edit({ components: [] }).catch(() => {});
-          }
-          await interaction.reply({
-            content: '⏹️ | Müzik durduruldu ve odadan ayrılındı.',
-            ephemeral: true
-          });
+          const stopEmbed = new EmbedBuilder()
+            .setColor('#ED4245')
+            .setDescription('⏹️ | Müzik durduruldu ve ses kanalından ayrılındı.');
+          await interaction.update({ embeds: [stopEmbed], components: [] });
           break;
         }
 
+        // Döngü: Yeni mesaj ATMAZ, butonu ve footer bilgisini yerinde günceller!
         case 'music_loop': {
-          const isLoop = musicManager.toggleLoop(guild.id);
-          const row = musicManager.getControlRow(queue);
-          await interaction.update({ components: [row] });
-          await interaction.followUp({
-            content: isLoop ? '🔁 | Şarkı döngüsü açıldı (Şarkı sürekli tekrarlanacak).' : '➡️ | Şarkı döngüsü kapatıldı.',
-            ephemeral: true
+          musicManager.toggleLoop(guild.id);
+          const embed = queue.isShowingQueue 
+            ? musicManager.getQueueEmbed(guild.id) 
+            : musicManager.getNowPlayingEmbed(guild.id);
+          const row = musicManager.getControlRow(queue, queue.isShowingQueue);
+          await interaction.update({ embeds: [embed], components: [row] });
+          break;
+        }
+
+        // Sıra Butonu: Alt alta mesaj atmak yerine AYNI MESAJI Şarkı Kuyruğu ekranına dönüştürür!
+        case 'music_queue': {
+          queue.isShowingQueue = true;
+          const queueEmbed = musicManager.getQueueEmbed(guild.id);
+          const row = musicManager.getControlRow(queue, true);
+          await interaction.update({
+            embeds: [queueEmbed],
+            components: [row]
           });
           break;
         }
 
-        case 'music_queue': {
-          if (!queue.songs || queue.songs.length === 0) {
-            return interaction.reply({
-              content: 'Sırada şarkı bulunmuyor.',
-              ephemeral: true
-            });
-          }
-
-          const currentSong = queue.songs[0];
-          const upcoming = queue.songs.slice(1, 11);
-
-          let description = `**Şu An Çalan:**\n🎵 [${currentSong.title}](${currentSong.url}) | \`${currentSong.duration}\`\n\n**Sıradaki Şarkılar:**\n`;
-
-          if (upcoming.length > 0) {
-            upcoming.forEach((s, idx) => {
-              description += `**${idx + 1}.** [${s.title}](${s.url}) | \`${s.duration}\` (İsteyen: <@${s.requesterId}>)\n`;
-            });
-            if (queue.songs.length > 11) {
-              description += `\n*...ve ${queue.songs.length - 11} şarkı daha.*`;
-            }
-          } else {
-            description += '*Sırada başka şarkı yok.*';
-          }
-
-          const queueEmbed = new EmbedBuilder()
-            .setColor('#5865F2')
-            .setTitle(`🎶 Şarkı Sırası (${queue.songs.length} Şarkı)`)
-            .setDescription(description)
-            .setFooter({ text: `Döngü: ${queue.loop ? 'Açık' : 'Kapalı'}` });
-
-          await interaction.reply({
-            embeds: [queueEmbed],
-            ephemeral: true
+        // Geri Dön Butonu: Sıra ekranından tekrar Şimdi Çalıyor ekranına döner!
+        case 'music_back_nowplaying': {
+          queue.isShowingQueue = false;
+          const nowPlayingEmbed = musicManager.getNowPlayingEmbed(guild.id);
+          const row = musicManager.getControlRow(queue, false);
+          await interaction.update({
+            embeds: [nowPlayingEmbed],
+            components: [row]
           });
           break;
         }

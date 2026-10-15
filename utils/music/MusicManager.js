@@ -127,7 +127,7 @@ class MusicManager {
       try {
         const res = await axios.get(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`, { timeout: 5000 });
         if (res.data && res.data.title) {
-          return res.data.title;
+          return `${res.data.title} ${res.data.author_name || ''}`.trim();
         }
       } catch (_) {}
     }
@@ -135,78 +135,75 @@ class MusicManager {
     return null;
   }
 
-  // Başlıktan gürültüleri (emojiler, 7/24, canlı yayın, parantezler) temizleyip arama terimleri çıkarır
+  // Başlıktan gürültüleri ayıklar
   extractSearchQueries(rawTitle) {
     if (!rawTitle) return [];
     
-    // Emojileri ve özel sembolleri temizle
     let clean = rawTitle.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}🔴🔥🎵✨⭐📢]/gu, ' ');
-    // Gürültü kelimeleri temizle
     clean = clean.replace(/\b(canlı yayın|canli yayin|live stream|live|7\/24|official|video|music video|audio|lyrics)\b/gi, ' ');
     
     const parts = clean.split(/[|\-–]/).map(p => p.trim()).filter(p => p.length >= 3);
     const queries = [];
-    if (parts.length > 0) {
-      queries.push(parts[0]);
-    }
-    if (parts.length > 1) {
-      queries.push(parts[1]);
-    }
+    if (parts.length > 0) queries.push(parts[0]);
+    if (parts.length > 1) queries.push(parts[1]);
     queries.push(clean.trim());
 
-    // Tekrarlardan arındır
     return [...new Set(queries.filter(q => q && q.length > 2))];
   }
 
-  // Akıllı Arama & Çözme (SoundCloud + YouTube + Fallback)
+  // Akıllı Arama & Çözme (Playlist, SoundCloud, YouTube, Fallback)
   async searchOrResolve(query) {
     await this.initPromise;
 
     const isUrl = /^https?:\/\//i.test(query.trim());
+    const isPlaylistUrl = isUrl && /[?&]list=/i.test(query.trim());
     const target = query.trim();
 
-    // Link ise başlık meta verisini al
+    // 1. Durum: Playlist Linki Girilmişse
+    if (isPlaylistUrl) {
+      try {
+        return await this.fetchMetadata(target, true);
+      } catch (err) {
+        console.log(`[MUSIC] Playlist yüklenirken hata oluştu: ${err.message}`);
+      }
+    }
+
     const linkTitle = isUrl ? await this.resolveLinkMetadata(target) : null;
 
-    // 1. Durum: Doğrudan URL girilmişse önce o linki dene
+    // 2. Durum: Normal Tekil URL Girilmişse
     if (isUrl) {
       try {
-        return await this.fetchMetadata(target);
+        return await this.fetchMetadata(target, false);
       } catch (err) {
         console.log(`[MUSIC] Link koruması aşılamadı (${err.message}). Başlık çözümleniyor...`);
 
         if (linkTitle) {
           const searchCandidates = this.extractSearchQueries(linkTitle);
-          console.log('[MUSIC] Arama adayları:', searchCandidates);
-
           for (const cand of searchCandidates) {
             try {
-              console.log(`[MUSIC] SoundCloud üzerinden deneniyor: "${cand}"`);
-              const res = await this.fetchMetadata(`scsearch1:${cand}`);
+              const res = await this.fetchMetadata(`scsearch1:${cand}`, false);
               if (res) return res;
             } catch (_) {}
           }
         }
 
-        throw new Error('Parça YouTube bot korumasına takıldı ve SoundCloud eşleşmesi bulunamadı. Lütfen şarkı adını doğrudan yazarak arayın.');
+        throw new Error('Parça korumaya takıldı ve eşleşme bulunamadı. Lütfen şarkı adını doğrudan yazarak arayın.');
       }
     }
 
-    // 2. Durum: Şarkı adı yazılmışsa (Örn: "tarkan yolla", "duman")
-    // SoundCloud'da ara (Datacenter IP engeli kesinlikle YOKTUR)
+    // 3. Durum: Şarkı Adı Yazılmışsa
     try {
-      return await this.fetchMetadata(`scsearch1:${target}`);
+      return await this.fetchMetadata(`scsearch1:${target}`, false);
     } catch (scErr) {
-      console.log(`[MUSIC] SoundCloud'da bulunamadı, YouTube araması deneniyor...`);
       try {
-        return await this.fetchMetadata(`ytsearch1:${target}`);
-      } catch (ytErr) {
+        return await this.fetchMetadata(`ytsearch1:${target}`, false);
+      } catch (_) {
         throw new Error(`Şarkı bulunamadı: ${scErr.message}`);
       }
     }
   }
 
-  fetchMetadata(target) {
+  fetchMetadata(target, forcePlaylist = false) {
     return new Promise((resolve, reject) => {
       const args = [
         target,
@@ -230,15 +227,41 @@ class MusicManager {
 
       proc.on('close', code => {
         if (code !== 0 || !stdout.trim()) {
-          return reject(new Error(stderr.trim() || 'Şarkı bulunamadı.'));
+          return reject(new Error(stderr.trim() || 'Veri alınamadı.'));
         }
 
         try {
           const data = JSON.parse(stdout);
+
+          // Playlist Tespiti:
+          if ((forcePlaylist || data._type === 'playlist') && data.entries && data.entries.length > 0) {
+            const playlistSongs = data.entries
+              .filter(e => e && (e.title || e.url || e.id))
+              .map(entry => ({
+                title: entry.title || 'Bilinmeyen Başlık',
+                url: entry.webpage_url || entry.url || `https://www.youtube.com/watch?v=${entry.id}`,
+                duration: entry.duration_string || (entry.duration ? `${Math.floor(entry.duration / 60)}:${('0' + (entry.duration % 60)).slice(-2)}` : 'Bilinmiyor'),
+                thumbnail: entry.thumbnail || (entry.thumbnails && entry.thumbnails[0]?.url) || null,
+                uploader: entry.uploader || entry.channel || data.uploader || 'Sanatçı',
+                id: entry.id,
+                isLive: entry.is_live || false
+              }));
+
+            return resolve({
+              isPlaylist: true,
+              title: data.title || 'Oynatma Listesi',
+              songs: playlistSongs,
+              count: playlistSongs.length,
+              url: target
+            });
+          }
+
+          // Tekil Şarkı:
           const entry = data.entries ? data.entries[0] : data;
           if (!entry) return reject(new Error('Sonuç bulunamadı.'));
 
           resolve({
+            isPlaylist: false,
             title: entry.title || 'Bilinmeyen Başlık',
             url: entry.webpage_url || entry.url || `https://www.youtube.com/watch?v=${entry.id}`,
             duration: entry.duration_string || (entry.duration ? `${Math.floor(entry.duration / 60)}:${('0' + (entry.duration % 60)).slice(-2)}` : 'Canlı Yayın (Radyo)'),
@@ -288,7 +311,6 @@ class MusicManager {
     });
   }
 
-  // FFmpeg ile decode edilmiş PCM stream
   createStreamFromUrl(directAudioUrl) {
     const ffmpegProc = spawn(this.getFfmpegPath(), [
       '-reconnect', '1',
@@ -307,9 +329,85 @@ class MusicManager {
     return ffmpegProc.stdout;
   }
 
-  getControlRow(queue) {
+  // Şimdi Çalıyor Embed'ini Üretir
+  getNowPlayingEmbed(guildId) {
+    const queue = this.queues.get(guildId);
+    if (!queue || !queue.songs[0]) return null;
+
+    const song = queue.songs[0];
+    const isPaused = queue.paused;
+    const isLoop = queue.loop;
+
+    return new EmbedBuilder()
+      .setColor(isPaused ? '#FFAA00' : '#5865F2')
+      .setTitle(song.isLive ? '🔴 Şimdi Yayında (Canlı Radyo)' : (isPaused ? '⏸️ Müzik Duraklatıldı' : '🎶 Şimdi Çalıyor'))
+      .setDescription(`[**${song.title}**](${song.url})`)
+      .addFields(
+        { name: '⏱️ Süre / Durum', value: `\`${song.duration}\``, inline: true },
+        { name: '👤 Ekleyen', value: `<@${song.requesterId}>`, inline: true },
+        { name: '📺 Sanatçı / Kanal', value: `\`${song.uploader}\``, inline: true }
+      )
+      .setThumbnail(song.thumbnail)
+      .setFooter({ text: `Xenos Müzik • Döngü: ${isLoop ? 'Açık' : 'Kapalı'} • Sırada: ${queue.songs.length - 1} Parça` });
+  }
+
+  // Şarkı Sırası Embed'ini Üretir
+  getQueueEmbed(guildId) {
+    const queue = this.queues.get(guildId);
+    if (!queue || !queue.songs || queue.songs.length === 0) return null;
+
+    const currentSong = queue.songs[0];
+    const upcoming = queue.songs.slice(1, 11);
+
+    let description = `**▶️ Şu An Çalan:**\n[${currentSong.title}](${currentSong.url}) | \`${currentSong.duration}\`\n\n**📑 Sıradaki Şarkılar:**\n`;
+
+    if (upcoming.length > 0) {
+      upcoming.forEach((s, idx) => {
+        description += `**${idx + 1}.** [${s.title}](${s.url}) | \`${s.duration}\`\n`;
+      });
+      if (queue.songs.length > 11) {
+        description += `\n*...ve ${queue.songs.length - 11} şarkı daha.*`;
+      }
+    } else {
+      description += '*Sırada başka şarkı bulunmuyor.*';
+    }
+
+    return new EmbedBuilder()
+      .setColor('#5865F2')
+      .setTitle(`🎶 Şarkı Kuyruğu (Toplam ${queue.songs.length} Parça)`)
+      .setDescription(description)
+      .setFooter({ text: `Döngü: ${queue.loop ? 'Açık' : 'Kapalı'} • Sıra ekranındasınız` });
+  }
+
+  // Buton Satırını Üretir
+  getControlRow(queue, isShowingQueue = false) {
     const isPaused = queue ? queue.paused : false;
     const isLoop = queue ? queue.loop : false;
+
+    if (isShowingQueue) {
+      return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('music_back_nowplaying')
+          .setEmoji('🔙')
+          .setLabel('Şimdi Çalıyor')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId('music_skip')
+          .setEmoji('⏭️')
+          .setLabel('Geç')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId('music_stop')
+          .setEmoji('⏹️')
+          .setLabel('Durdur')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId('music_loop')
+          .setEmoji('🔁')
+          .setLabel(isLoop ? 'Döngü Açık' : 'Döngü Kapalı')
+          .setStyle(isLoop ? ButtonStyle.Success : ButtonStyle.Secondary)
+      );
+    }
 
     return new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -340,9 +438,9 @@ class MusicManager {
     );
   }
 
-  async play(guild, channel, textChannel, song) {
+  // Ortak Kuyruk Kurucu
+  getOrCreateQueue(guild, channel, textChannel) {
     let queue = this.queues.get(guild.id);
-
     if (!queue) {
       const connection = joinVoiceChannel({
         channelId: channel.id,
@@ -361,7 +459,8 @@ class MusicManager {
         songs: [],
         paused: false,
         loop: false,
-        nowPlayingMsg: null
+        nowPlayingMsg: null,
+        isShowingQueue: false
       };
 
       this.queues.set(guild.id, queue);
@@ -380,11 +479,16 @@ class MusicManager {
               if (currentQueue && currentQueue.songs.length === 0) {
                 currentQueue.connection.destroy();
                 this.queues.delete(guild.id);
-                textChannel.send({ embeds: [
-                  new EmbedBuilder()
-                    .setColor('#FF9900')
-                    .setDescription('🎵 | Şarkı listesi bittiği için ses kanalından ayrıldım.')
-                ] }).catch(() => {});
+                if (currentQueue.nowPlayingMsg) {
+                  currentQueue.nowPlayingMsg.edit({
+                    embeds: [
+                      new EmbedBuilder()
+                        .setColor('#FF9900')
+                        .setDescription('🎵 | Şarkı listesi bittiği için ses kanalından ayrıldım.')
+                    ],
+                    components: []
+                  }).catch(() => {});
+                }
               }
             }, 60000);
           }
@@ -403,15 +507,61 @@ class MusicManager {
         this.queues.delete(guild.id);
       });
     }
+    return queue;
+  }
 
+  // Tekil Şarkı Oynatma
+  async play(guild, channel, textChannel, song) {
+    const queue = this.getOrCreateQueue(guild, channel, textChannel);
     queue.songs.push(song);
 
     if (queue.songs.length === 1) {
       await this.executePlay(guild.id, song);
       return { status: 'playing', song };
     } else {
+      // Sıradaki şarkı sayısı değiştiği için ana mesajı da sessizce güncelle
+      this.refreshNowPlayingMessage(guild.id);
       return { status: 'queued', song, position: queue.songs.length - 1 };
     }
+  }
+
+  // Playlist Oynatma
+  async playPlaylist(guild, channel, textChannel, songs, playlistTitle, requesterId) {
+    const queue = this.getOrCreateQueue(guild, channel, textChannel);
+    const wasEmpty = queue.songs.length === 0;
+
+    const formattedSongs = songs.map(s => ({
+      ...s,
+      requesterId: requesterId
+    }));
+
+    queue.songs.push(...formattedSongs);
+
+    if (wasEmpty && queue.songs.length > 0) {
+      await this.executePlay(guild.id, queue.songs[0]);
+    } else {
+      this.refreshNowPlayingMessage(guild.id);
+    }
+
+    return {
+      status: wasEmpty ? 'playing_playlist' : 'queued_playlist',
+      count: formattedSongs.length,
+      firstSong: formattedSongs[0]
+    };
+  }
+
+  // Mevcut mesajı güncelle (Yeni mesaj göndermeden!)
+  async refreshNowPlayingMessage(guildId) {
+    const queue = this.queues.get(guildId);
+    if (!queue || !queue.nowPlayingMsg) return;
+
+    try {
+      const embed = queue.isShowingQueue ? this.getQueueEmbed(guildId) : this.getNowPlayingEmbed(guildId);
+      const row = this.getControlRow(queue, queue.isShowingQueue);
+      if (embed) {
+        await queue.nowPlayingMsg.edit({ embeds: [embed], components: [row] }).catch(() => {});
+      }
+    } catch (_) {}
   }
 
   async executePlay(guildId, song) {
@@ -428,24 +578,19 @@ class MusicManager {
 
       queue.player.play(resource);
       queue.paused = false;
+      queue.isShowingQueue = false;
 
-      const embed = new EmbedBuilder()
-        .setColor('#5865F2')
-        .setTitle(song.isLive ? '🔴 Şimdi Yayında (Canlı Radyo)' : '🎶 Şimdi Çalıyor')
-        .setDescription(`[**${song.title}**](${song.url})`)
-        .addFields(
-          { name: '⏱️ Süre / Durum', value: `\`${song.duration}\``, inline: true },
-          { name: '👤 Ekleyen', value: `<@${song.requesterId}>`, inline: true },
-          { name: '📺 Kanal / Yayıncı', value: `\`${song.uploader}\``, inline: true }
-        )
-        .setThumbnail(song.thumbnail)
-        .setTimestamp()
-        .setFooter({ text: 'Xenos Müzik', iconURL: guildId ? (queue.voiceChannel?.guild?.iconURL() || undefined) : undefined });
+      const embed = this.getNowPlayingEmbed(guildId);
+      const row = this.getControlRow(queue, false);
 
-      const row = this.getControlRow(queue);
-
+      // Eğer zaten kanalda bir mesajımız varsa YENİSİNİ ATMA, MEVCUT OLANINI GÜNCELLE!
       if (queue.nowPlayingMsg) {
-        queue.nowPlayingMsg.delete().catch(() => {});
+        try {
+          await queue.nowPlayingMsg.edit({ embeds: [embed], components: [row] });
+          return;
+        } catch (_) {
+          queue.nowPlayingMsg = null;
+        }
       }
 
       queue.nowPlayingMsg = await queue.textChannel.send({
@@ -477,6 +622,16 @@ class MusicManager {
     queue.player.stop();
     if (queue.connection) {
       queue.connection.destroy();
+    }
+    if (queue.nowPlayingMsg) {
+      queue.nowPlayingMsg.edit({
+        embeds: [
+          new EmbedBuilder()
+            .setColor('#ED4245')
+            .setDescription('⏹️ | Müzik durduruldu ve ses kanalından ayrılındı.')
+        ],
+        components: []
+      }).catch(() => {});
     }
     this.queues.delete(guildId);
     return true;
