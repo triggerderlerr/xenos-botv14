@@ -4,6 +4,7 @@ const {
   createAudioResource, 
   AudioPlayerStatus, 
   VoiceConnectionStatus, 
+  entersState,
   StreamType 
 } = require('@discordjs/voice');
 const { spawn } = require('child_process');
@@ -92,7 +93,7 @@ class MusicManager {
     }
   }
 
-  // Çerez kaynağı önceliği: YT_COOKIES / YT_COOKIES_B64 ortam değişkeni (Render Environment) → cookies.txt dosyası
+  // Çerez kaynağı önceliği: YT_COOKIES / YT_COOKIES_B64 ortam değişkeni (Render) -> cookies.txt
   getCookiePath() {
     if (this._cookieFileCache !== undefined) return this._cookieFileCache;
 
@@ -103,7 +104,6 @@ class MusicManager {
 
     if (raw && raw.trim()) {
       try {
-        // Render'da ortam değişkenleri satır sonlarını "\n" metni olarak taşıyabilir
         raw = raw.replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
         if (!/^# (Netscape )?HTTP Cookie File/m.test(raw)) {
           raw = '# Netscape HTTP Cookie File\n' + raw;
@@ -142,18 +142,6 @@ class MusicManager {
     return args;
   }
 
-  // YouTube engellenirse aynı parçayı SoundCloud'da bulur
-  async findSoundCloudAlternative(title) {
-    const candidates = this.extractSearchQueries(title);
-    for (const cand of candidates) {
-      try {
-        const res = await this.fetchMetadata(`scsearch1:${cand}`, false);
-        if (res && !res.isPlaylist && res.url) return res;
-      } catch (_) {}
-    }
-    return null;
-  }
-
   getFfmpegPath() {
     return ffmpegStatic || 'ffmpeg';
   }
@@ -185,14 +173,12 @@ class MusicManager {
     return null;
   }
 
-  // Başlıktan gürültüleri ayıklar
+  // Başlıktan gürültüleri ayıklar ve en temiz "Sanatçı Şarkı" terimlerini üretir
   extractSearchQueries(rawTitle) {
     if (!rawTitle) return [];
 
     let clean = rawTitle.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}🔴🔥🎵✨⭐📢]/gu, ' ');
-    // Parantez / köşeli parantez içeriklerini at: (Official Music Video), [4K] vb.
     clean = clean.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ');
-    // Kanal sonekleri: "50CentVEVO", "Artist - Topic"
     clean = clean.replace(/\b\w*VEVO\b/gi, ' ').replace(/\s-\sTopic\b/gi, ' ');
     clean = clean.replace(/\b(canlı yayın|canli yayin|live stream|live|7\/24|official|music video|video|audio|lyrics|lyric|hd|hq|4k)\b/gi, ' ');
     clean = clean.replace(/\s+/g, ' ').trim();
@@ -200,13 +186,24 @@ class MusicManager {
     const parts = clean.split(/\s[|\-–]\s|[|–]/).map(p => p.trim()).filter(p => p.length >= 2);
     const queries = [];
 
-    // En iyi aday: "Sanatçı Şarkı" (ayraçsız birleşik)
     if (parts.length >= 2) queries.push(`${parts[0]} ${parts[1]}`);
     queries.push(clean.replace(/[|\-–]/g, ' ').replace(/\s+/g, ' ').trim());
     if (parts.length >= 2) queries.push(parts[1]);
     if (parts.length >= 1) queries.push(parts[0]);
 
     return [...new Set(queries.filter(q => q && q.length > 2))];
+  }
+
+  // YouTube engellenirse aynı parçayı SoundCloud'da bulur
+  async findSoundCloudAlternative(title) {
+    const candidates = this.extractSearchQueries(title);
+    for (const cand of candidates) {
+      try {
+        const res = await this.fetchMetadata(`scsearch1:${cand}`, false);
+        if (res && !res.isPlaylist && res.url) return res;
+      } catch (_) {}
+    }
+    return null;
   }
 
   // Akıllı Arama & Çözme (Playlist, SoundCloud, YouTube, Fallback)
@@ -236,20 +233,15 @@ class MusicManager {
         console.log(`[MUSIC] Link koruması aşılamadı (${err.message}). Başlık çözümleniyor...`);
 
         if (linkTitle) {
-          const searchCandidates = this.extractSearchQueries(linkTitle);
-          for (const cand of searchCandidates) {
-            try {
-              const res = await this.fetchMetadata(`scsearch1:${cand}`, false);
-              if (res) return res;
-            } catch (_) {}
-          }
+          const alt = await this.findSoundCloudAlternative(linkTitle);
+          if (alt) return alt;
         }
 
         throw new Error('Parça korumaya takıldı ve eşleşme bulunamadı. Lütfen şarkı adını doğrudan yazarak arayın.');
       }
     }
 
-    // 3. Durum: Şarkı Adı Yazılmışsa
+    // 3. Durum: Şarkı Adı Yazılmışsa (Önce SoundCloud, gerekirse YouTube)
     try {
       return await this.fetchMetadata(`scsearch1:${target}`, false);
     } catch (scErr) {
@@ -288,7 +280,7 @@ class MusicManager {
         try {
           const data = JSON.parse(stdout);
 
-          // Playlist Tespiti: arama sorguları (scsearch/ytsearch) da 'playlist' tipinde döner, bunlar playlist SAYILMAZ
+          // Playlist Tespiti (Arama sorguları playlist SAYILMAZ!)
           const isSearchQuery = /^(scsearch|ytsearch)\d*:/i.test(target);
           if (!isSearchQuery && (forcePlaylist || data._type === 'playlist') && data.entries && data.entries.length > 0) {
             const playlistSongs = data.entries
@@ -364,6 +356,7 @@ class MusicManager {
     });
   }
 
+  // FFmpeg ile doğrudan Discord için OggOpus stream üretimi (Saf Opus, CPU dostu, sıfır gecikme!)
   createStreamFromUrl(directAudioUrl) {
     const ffArgs = [
       '-reconnect', '1',
@@ -371,31 +364,39 @@ class MusicManager {
       '-reconnect_delay_max', '5'
     ];
 
-    // googlevideo akış linkleri yt-dlp'nin çıktığı IP'ye bağlıdır; proxy kullanılıyorsa FFmpeg de aynı proxy'den geçmeli
     if (process.env.YTDLP_PROXY && /googlevideo\.com/i.test(directAudioUrl)) {
       ffArgs.push('-http_proxy', process.env.YTDLP_PROXY);
     }
 
     ffArgs.push(
       '-i', directAudioUrl,
-      '-f', 's16le',
+      '-c:a', 'libopus',
+      '-b:a', '128k',
       '-ar', '48000',
       '-ac', '2',
+      '-f', 'ogg',
       'pipe:1'
     );
 
     const ffmpegProc = spawn(this.getFfmpegPath(), ffArgs, {
-      stdio: ['ignore', 'pipe', 'ignore']
+      stdio: ['ignore', 'pipe', 'pipe']
     });
 
-    ffmpegProc.on('error', err => console.error('[FFMPEG Error]', err.message));
+    ffmpegProc.stderr.on('data', chunk => {
+      const line = chunk.toString();
+      if (line.includes('Error') || line.includes('error')) {
+        console.error('[FFMPEG Error Details]', line.trim());
+      }
+    });
+
+    ffmpegProc.on('error', err => console.error('[FFMPEG Process Error]', err.message));
     return ffmpegProc.stdout;
   }
 
   // Şimdi Çalıyor Embed'ini Üretir
   getNowPlayingEmbed(guildId) {
     const queue = this.queues.get(guildId);
-    if (!queue || !queue.songs[0]) return null;
+    if (!queue || !queue.songs || !queue.songs[0]) return null;
 
     const song = queue.songs[0];
     const isPaused = queue.paused;
@@ -505,10 +506,13 @@ class MusicManager {
   getOrCreateQueue(guild, channel, textChannel) {
     let queue = this.queues.get(guild.id);
     if (!queue) {
+      console.log(`[MUSIC] Ses kanalına bağlanılıyor: ${channel.name} (${channel.id})`);
       const connection = joinVoiceChannel({
         channelId: channel.id,
         guildId: guild.id,
         adapterCreator: guild.voiceAdapterCreator,
+        selfDeaf: true,
+        selfMute: false
       });
 
       const player = createAudioPlayer();
@@ -529,6 +533,14 @@ class MusicManager {
       this.queues.set(guild.id, queue);
       connection.subscribe(player);
 
+      connection.on('stateChange', (oldState, newState) => {
+        console.log(`[MUSIC] Ses Bağlantı Durumu [${guild.id}]: ${oldState.status} -> ${newState.status}`);
+      });
+
+      player.on('stateChange', (oldState, newState) => {
+        console.log(`[MUSIC] Player Durumu [${guild.id}]: ${oldState.status} -> ${newState.status}`);
+      });
+
       player.on(AudioPlayerStatus.Idle, () => {
         if (queue.loop && queue.songs[0]) {
           this.executePlay(guild.id, queue.songs[0]);
@@ -540,7 +552,7 @@ class MusicManager {
             setTimeout(() => {
               const currentQueue = this.queues.get(guild.id);
               if (currentQueue && currentQueue.songs.length === 0) {
-                currentQueue.connection.destroy();
+                if (currentQueue.connection) currentQueue.connection.destroy();
                 this.queues.delete(guild.id);
                 if (currentQueue.nowPlayingMsg) {
                   currentQueue.nowPlayingMsg.edit({
@@ -567,6 +579,7 @@ class MusicManager {
       });
 
       connection.on(VoiceConnectionStatus.Disconnected, () => {
+        console.log(`[MUSIC] Ses bağlantısı kesildi: ${guild.id}`);
         this.queues.delete(guild.id);
       });
     }
@@ -582,7 +595,6 @@ class MusicManager {
       await this.executePlay(guild.id, song);
       return { status: 'playing', song };
     } else {
-      // Sıradaki şarkı sayısı değiştiği için ana mesajı da sessizce güncelle
       this.refreshNowPlayingMessage(guild.id);
       return { status: 'queued', song, position: queue.songs.length - 1 };
     }
@@ -613,7 +625,7 @@ class MusicManager {
     };
   }
 
-  // Mevcut mesajı güncelle (Yeni mesaj göndermeden!)
+  // Mevcut mesajı güncelle
   async refreshNowPlayingMessage(guildId) {
     const queue = this.queues.get(guildId);
     if (!queue || !queue.nowPlayingMsg) return;
@@ -627,18 +639,28 @@ class MusicManager {
     } catch (_) {}
   }
 
+  // Şarkıyı ses kanalında oynatır
   async executePlay(guildId, song) {
     const queue = this.queues.get(guildId);
     if (!queue || !song) return;
 
     try {
+      // 1. ADIM: Discord Ses Bağlantısının "Ready" (Hazır) olmasını bekle!
+      // (Render.com ve bulut sunucularında UDP el sıkışması tamamlanmadan ses gönderilirse ses boşluğa gider!)
+      try {
+        await entersState(queue.connection, VoiceConnectionStatus.Ready, 20_000);
+      } catch (connErr) {
+        console.error('[MUSIC] Ses bağlantısı Ready durumuna geçemedi:', connErr.message);
+        throw new Error('Ses sunucusuna bağlanılamadı (UDP zaman aşımı).');
+      }
+
+      // 2. ADIM: Ses URL'sini al (YouTube engellerse SoundCloud alternatifine geç)
       let directAudioUrl;
       try {
         directAudioUrl = await this.getDirectAudioUrl(song.url);
       } catch (streamErr) {
-        // YouTube veri merkezi engeli (bot kontrolü) ise aynı parçayı SoundCloud'dan bulup çal
         if (/sign in|not a bot|cookies|429|403/i.test(streamErr.message) && /youtube\.com|youtu\.be/i.test(song.url)) {
-          console.log(`[MUSIC] YouTube akışı engellendi, SoundCloud yedeği deneniyor: "${song.title}"`);
+          console.log(`[MUSIC] YouTube akışı engellendi, SoundCloud yedeği aranıyor: "${song.title}"`);
           const alt = await this.findSoundCloudAlternative(song.title);
           if (!alt) throw streamErr;
           song.url = alt.url;
@@ -649,10 +671,13 @@ class MusicManager {
           throw streamErr;
         }
       }
+
+      // 3. ADIM: FFmpeg ile OggOpus akışı oluştur ve player'a ver
       const stream = this.createStreamFromUrl(directAudioUrl);
 
       const resource = createAudioResource(stream, {
-        inputType: StreamType.Raw
+        inputType: StreamType.OggOpus,
+        inlineVolume: true
       });
 
       queue.player.play(resource);
@@ -662,7 +687,6 @@ class MusicManager {
       const embed = this.getNowPlayingEmbed(guildId);
       const row = this.getControlRow(queue, false);
 
-      // Eğer zaten kanalda bir mesajımız varsa YENİSİNİ ATMA, MEVCUT OLANINI GÜNCELLE!
       if (queue.nowPlayingMsg) {
         try {
           await queue.nowPlayingMsg.edit({ embeds: [embed], components: [row] });
@@ -684,6 +708,7 @@ class MusicManager {
         ? '❌ Bu parça YouTube tarafından sunucuya kapatıldı ve alternatif bir kaynak bulunamadı. Şarkıyı **ismiyle** yazarak aramayı dene.'
         : `❌ Şarkı çalınırken hata oluştu: ${String(error.message).slice(0, 200)}`;
       queue.textChannel.send(friendly).catch(() => {});
+
       queue.songs.shift();
       if (queue.songs.length > 0) {
         this.executePlay(guildId, queue.songs[0]);

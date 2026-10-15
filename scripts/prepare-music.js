@@ -3,17 +3,32 @@ const path = require('path');
 const axios = require('axios');
 
 async function downloadYtDlp() {
+  const isWin = process.platform === 'win32';
+
+  // ffmpeg-static izinlerini kontrol et ve Linux üzerinde çalıştırılabilir (0755) yap
+  try {
+    const ffmpegPath = require('ffmpeg-static');
+    if (ffmpegPath && fs.existsSync(ffmpegPath) && !isWin) {
+      fs.chmodSync(ffmpegPath, 0o755);
+      console.log(`[MUSIC PREPARE] ffmpeg binary izinleri verildi (755): ${ffmpegPath}`);
+    }
+  } catch (err) {
+    console.log('[MUSIC PREPARE] ffmpeg kontrolü:', err.message);
+  }
+
   const binDir = path.join(__dirname, '../bin');
   if (!fs.existsSync(binDir)) {
     fs.mkdirSync(binDir, { recursive: true });
   }
 
-  const isWin = process.platform === 'win32';
   const binName = isWin ? 'yt-dlp.exe' : 'yt-dlp';
   const targetPath = path.join(binDir, binName);
 
   if (fs.existsSync(targetPath)) {
     console.log(`[MUSIC PREPARE] yt-dlp zaten mevcut: ${targetPath}`);
+    if (!isWin) {
+      try { fs.chmodSync(targetPath, 0o755); } catch (_) {}
+    }
     return;
   }
 
